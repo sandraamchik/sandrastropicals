@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+    import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getInventory, addInventory } from '../services/sheets.js'
 
@@ -150,7 +150,7 @@ export default function Inventory() {
 
           {/* Pipeline counts */}
           <div style={{ padding:'0 16px', marginBottom:14, overflowX:'auto', scrollbarWidth:'none' }}>
-            <div style={{ display:'flex', gap:6' }}>
+            <div style={{ display:'flex', gap:6 }}>
               <button onClick={() => setFilterStage('all')} style={{
                 padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap',
                 border:'0.5px solid #e5e5e5', background: filterStage==='all'?'#1a1a1a':'#fff', color: filterStage==='all'?'#fff':'#666'
@@ -289,3 +289,5 @@ export default function Inventory() {
     </div>
   )
 }
+
+    
