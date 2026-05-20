@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+    import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSales, getExpenses } from '../services/sheets.js'
 import { TopBar, SectionTitle, StatCard, FAB } from './Nav.jsx'
@@ -100,6 +100,7 @@ export default function Home({ onSignOut }) {
           { label:'Suppliers', icon:'🌏', path:'/suppliers' },
           { label:'Shows',     icon:'🎪', path:'/shows'     },
           { label:'Expenses',  icon:'🧾', path:'/expenses'  },
+          { label:'Import data', icon:'📥', path:'/import' },
           { label:'Settings',  icon:'⚙️', path:'/settings'  },
         ].map(q => (
           <button key={q.path} onClick={() => navigate(q.path)} style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 14px', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:12, cursor:'pointer', fontSize:14, fontWeight:500, color:'#1a1a1a', minHeight:50 }}>
@@ -143,3 +144,5 @@ export default function Home({ onSignOut }) {
     </div>
   )
 }
+
+    
