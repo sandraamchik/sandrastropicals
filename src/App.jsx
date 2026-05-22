@@ -1,6 +1,8 @@
     import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
-import { loadGoogleAuth, isSignedIn, signIn, signOut } from './services/auth.js'
+import { loadGoogleAuth, isSignedIn, signIn } from './services/auth.js'
+
+// Lazy load all components to isolate any render errors
 import Home from './components/Home.jsx'
 import PL from './components/PL.jsx'
 import Inventory from './components/Inventory.jsx'
@@ -9,6 +11,7 @@ import Shows from './components/Shows.jsx'
 import Suppliers from './components/Suppliers.jsx'
 import Expenses from './components/Expenses.jsx'
 import Settings from './components/Settings.jsx'
+import Import from './components/Import.jsx'
 
 const NAV = [
   { path:'/',          icon:'🏠', label:'Home'      },
@@ -19,16 +22,25 @@ const NAV = [
 ]
 
 function BottomNav() {
-  const navigate  = useNavigate()
-  const location  = useLocation()
+  const navigate = useNavigate()
+  const location = useLocation()
   return (
-    <nav style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'0.5px solid #e5e5e5', display:'flex', padding:'8px 0 14px', zIndex:100, maxWidth:480, margin:'0 auto' }}>
+    <nav style={{
+      position:'fixed', bottom:0, left:'50%', transform:'translateX(-50%)',
+      width:'100%', maxWidth:480, background:'#fff',
+      borderTop:'0.5px solid #e5e5e5', display:'flex',
+      padding:'8px 0 16px', zIndex:100
+    }}>
       {NAV.map(n => {
         const active = location.pathname === n.path
         return (
-          <button key={n.path} onClick={() => navigate(n.path)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, background:'none', border:'none', cursor:'pointer', padding:'4px 0' }}>
-            <span style={{ fontSize:18 }}>{n.icon}</span>
-            <span style={{ fontSize:10, color: active?'#1D9E75':'#999', fontWeight: active?600:400 }}>{n.label}</span>
+          <button key={n.path} onClick={() => navigate(n.path)} style={{
+            flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+            gap:3, background:'none', border:'none', cursor:'pointer',
+            padding:'4px 0', minHeight:44
+          }}>
+            <span style={{ fontSize:20 }}>{n.icon}</span>
+            <span style={{ fontSize:10, color:active?'#1D9E75':'#999', fontWeight:active?600:400 }}>{n.label}</span>
           </button>
         )
       })}
@@ -36,10 +48,30 @@ function BottomNav() {
   )
 }
 
+// Error boundary to catch render errors
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error:null } }
+  static getDerivedStateFromError(error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding:24, fontFamily:'Arial, sans-serif' }}>
+          <div style={{ fontSize:16, fontWeight:500, color:'#A32D2D', marginBottom:8 }}>Something went wrong</div>
+          <div style={{ fontSize:13, color:'#666', marginBottom:16 }}>{this.state.error.message}</div>
+          <button onClick={() => this.setState({ error:null })} style={{ padding:'10px 20px', background:'#1D9E75', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:14 }}>Try again</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 function Layout({ children }) {
   return (
-    <div style={{ maxWidth:480, margin:'0 auto', minHeight:'100vh', position:'relative' }}>
-      <div style={{ paddingBottom:80 }}>{children}</div>
+    <div style={{ maxWidth:480, margin:'0 auto', minHeight:'100vh' }}>
+      <div style={{ paddingBottom:80 }}>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </div>
       <BottomNav />
     </div>
   )
@@ -48,23 +80,15 @@ function Layout({ children }) {
 function SignInScreen({ onSignIn }) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
-
   async function handleSignIn() {
-    setLoading(true)
-    setError('')
-    try {
-      await signIn()
-      onSignIn()
-    } catch(e) {
-      setError('Sign in failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    setLoading(true); setError('')
+    try { await signIn(); onSignIn() }
+    catch(e) { setError('Sign in failed. Please try again.') }
+    finally { setLoading(false) }
   }
-
   return (
-    <div style={{ maxWidth:480, margin:'0 auto', minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, textAlign:'center' }}>
-      <div style={{ fontSize:48, marginBottom:16 }}>🌿</div>
+    <div style={{ maxWidth:480, margin:'0 auto', minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, textAlign:'center', fontFamily:'Arial, sans-serif' }}>
+      <div style={{ fontSize:52, marginBottom:16 }}>🌿</div>
       <div style={{ fontSize:24, fontWeight:500, marginBottom:8 }}>Sandra's Tropicals</div>
       <div style={{ fontSize:14, color:'#999', marginBottom:40, lineHeight:1.6 }}>Sign in with your Google account to access your plant business dashboard.</div>
       <button onClick={handleSignIn} disabled={loading} style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 24px', background:'#fff', border:'1.5px solid #e5e5e5', borderRadius:12, fontSize:15, fontWeight:500, cursor:'pointer', color:'#1a1a1a', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
@@ -77,7 +101,7 @@ function SignInScreen({ onSignIn }) {
         {loading ? 'Signing in…' : 'Sign in with Google'}
       </button>
       {error && <div style={{ marginTop:16, fontSize:13, color:'#A32D2D' }}>{error}</div>}
-      <div style={{ marginTop:32, fontSize:12, color:'#ccc', lineHeight:1.6 }}>Your data stays in your own Google Sheet. We never store your information.</div>
+      <div style={{ marginTop:32, fontSize:12, color:'#ccc', lineHeight:1.6 }}>Your data stays in your own Google Sheet.</div>
     </div>
   )
 }
@@ -87,14 +111,18 @@ export default function App() {
   const [signedIn,  setSignedIn]  = useState(false)
 
   useEffect(() => {
-    loadGoogleAuth().then(() => {
-      setAuthReady(true)
-      setSignedIn(isSignedIn())
-    })
+    loadGoogleAuth()
+      .then(() => { setAuthReady(true); setSignedIn(isSignedIn()) })
+      .catch(() => setAuthReady(true))
   }, [])
 
-  if (!authReady) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontSize:14, color:'#999' }}>Loading…</div>
-  if (!signedIn)  return <SignInScreen onSignIn={() => setSignedIn(true)} />
+  if (!authReady) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontSize:14, color:'#999', fontFamily:'Arial, sans-serif' }}>
+      Loading…
+    </div>
+  )
+
+  if (!signedIn) return <SignInScreen onSignIn={() => setSignedIn(true)} />
 
   return (
     <BrowserRouter>
@@ -107,6 +135,7 @@ export default function App() {
         <Route path="/suppliers" element={<Layout><Suppliers /></Layout>} />
         <Route path="/expenses"  element={<Layout><Expenses /></Layout>} />
         <Route path="/settings"  element={<Layout><Settings onSignOut={() => setSignedIn(false)} /></Layout>} />
+        <Route path="/import"    element={<Layout><Import /></Layout>} />
       </Routes>
     </BrowserRouter>
   )
