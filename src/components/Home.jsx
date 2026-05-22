@@ -1,6 +1,6 @@
     import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSales, getExpenses, addSale, addExpense } from '../services/sheets.js'
+import { getSales, getExpenses, addSale, addExpense, upsertCustomer } from '../services/sheets.js'
 
 const GOAL = parseFloat(localStorage.getItem('goal') || '4500')
 const CHANNELS = ['Show','Website','Instagram','Facebook','Exact plant','Other']
@@ -138,7 +138,7 @@ export default function Home({ onSignOut }) {
   const [saving, setSaving]   = useState(false)
 
   // Sale state — using refs to avoid re-render on each keystroke
-  const saleRef = useRef({ name:'', amount:'', channel:'Show', payment:'💵 Cash', customer:'', customerNote:'', notes:'', date:new Date().toISOString().slice(0,10) })
+  const saleRef = useRef({ name:'', amount:'', channel:'Show', payment:'💵 Cash', customer:'', customerNote:'', shipping:'', notes:'', date:new Date().toISOString().slice(0,10) })
   const [saleChannel, setSaleChannel]   = useState('Show')
   const [salePayment, setSalePayment]   = useState('💵 Cash')
   const [saleCustomer, setSaleCustomer] = useState('')
@@ -181,8 +181,20 @@ export default function Home({ onSignOut }) {
         '', '', '', saleChannel, '',
         salePayment, salePayment==='💵 Cash'?'Yes':'No', '', notes
       ])
+      // Auto-save customer
+      if (saleRef.current.customer) {
+        upsertCustomer({
+          name:     saleRef.current.customer,
+          date:     saleRef.current.date,
+          plant:    saleRef.current.name,
+          amount:   saleRef.current.amount,
+          channel:  saleChannel,
+          note:     saleCustomerNote,
+          shipping: saleRef.current.shipping,
+        })
+      }
       setModal(null)
-      saleRef.current = { name:'', amount:'', channel:'Show', payment:'💵 Cash', customer:'', customerNote:'', notes:'', date:new Date().toISOString().slice(0,10) }
+      saleRef.current = { name:'', amount:'', channel:'Show', payment:'💵 Cash', customer:'', customerNote:'', shipping:'', notes:'', date:new Date().toISOString().slice(0,10) }
       setSaleChannel('Show'); setSalePayment('💵 Cash'); setSaleCustomer(''); setSaleCustomerNote('')
       setTimeout(loadData, 500)
     } catch(err) { alert(err.message) }
@@ -335,6 +347,13 @@ export default function Home({ onSignOut }) {
                 note={saleCustomerNote}
                 onNoteChange={v => { setSaleCustomerNote(v); saleRef.current.customerNote = v }}
               />
+              {saleCustomer && (
+                <div style={{ marginTop:8 }}>
+                  <input type="text" onChange={e => saleRef.current.shipping = e.target.value}
+                    placeholder="Shipping address (optional)"
+                    style={{ width:'100%', padding:'10px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:14, fontFamily:'inherit', outline:'none', minHeight:44, boxSizing:'border-box', color:'#666' }} />
+                </div>
+              )}
             </Field>
 
             <Field label="Date">
