@@ -1,4 +1,4 @@
-// src/services/auth.js
+    // src/services/auth.js
 const CLIENT_ID = '652571219781-b9f1ic6jjjj8qtucu34mnk0kmt1tk8rl.apps.googleusercontent.com'
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets'
 
@@ -97,3 +97,5 @@ export function signOut() {
   sessionStorage.removeItem('gToken')
   sessionStorage.removeItem('gTokenExpiry')
 }
+
+    
