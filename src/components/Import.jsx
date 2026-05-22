@@ -1,7 +1,6 @@
-    import React, { useState, useRef } from 'react'
+    import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addSale, addExpense, addInventory } from '../services/sheets.js'
-import { TopBar, PrimaryButton, SectionTitle } from './Nav.jsx'
+import { addSale, addExpense, addInventory, getSales, getExpenses, getInventory } from '../services/sheets.js'
 
 const TEMPLATE_TYPES = [
   { key:'exactplants', label:'Exact Plants & Imports', icon:'🌱', color:'#378ADD', desc:'Plants sourced for customers or yourself — any vendor, any country' },
@@ -34,87 +33,112 @@ function cleanRows(rows) {
   })
 }
 
+function getRowKey(type, row) {
+  if (type === 'exactplants') return `${row['Date']||''}|${(row['Plant name']||row['Plant Name']||'').toLowerCase()}|${row['My price (CAD)']||''}`
+  if (type === 'consignment') return `${row['Date received']||''}|${(row['Plant name']||row['Plant Name']||'').toLowerCase()}`
+  if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
+  if (type === 'shopify')     return `${(row['Created at']||'').slice(0,10)}|${(row['Lineitem name']||row['Name']||'').toLowerCase()}|${row['Total']||''}`
+  return ''
+}
+
+function getExistingKey(type, row) {
+  if (type === 'exactplants' || type === 'shopify') return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
+  if (type === 'consignment') return `${row['Date Added']||''}|${(row['Plant Name']||'').toLowerCase()}`
+  if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
+  return ''
+}
+
 function mapRow(type, row) {
-  if (type === 'exactplants') {
-    return {
-      type: 'sale',
-      data: [
-        row['Date'] || new Date().toISOString().slice(0,10),
-        row['Plant name'] || row['Plant Name'] || '',
-        '', // type
-        1,
-        row['My price (CAD)'] || '',
-        row['Vendor price (CAD)'] || '',
-        '', '', // margin
-        'Exact plant',
-        '',
-        row['Paid by buyer'] === 'Yes' ? '📲 E-transfer' : '',
-        'No',
-        '',
-        `Buyer: ${row['Buyer']||''} · Vendor: ${row['Vendor']||''} · ${row['Notes']||''}`.trim(),
-      ]
-    }
-  }
-  if (type === 'consignment') {
-    return {
-      type: 'inventory',
-      data: [
-        row['Plant name'] || row['Plant Name'] || '',
-        row['Type'] || '',
-        row['Qty received'] || row['Qty'] || 1,
-        row['Date received'] || row['Date'] || '',
-        row['Price per unit (CAD)'] || '',
-        '', '', // sell price, margin
-        'Okanoka',
-        row['Shipment ID'] || '',
-        row['Mother plant?'] || 'No',
-        row['Status'] || 'Received',
-        row['Date received'] || '',
-        '','','No',
-        row['Notes'] || '',
-      ]
-    }
-  }
-  if (type === 'expenses') {
-    return {
-      type: 'expense',
-      data: [
-        row['Date'] || '',
-        row['Category'] || '',
-        row['Amount (CAD)'] || row['Amount'] || '',
-        row['Description'] || '',
-        row['Shipment ID'] || '',
-        row['Notes'] || '',
-      ]
-    }
-  }
-  if (type === 'shopify') {
-    return {
-      type: 'sale',
-      data: [
-        row['Created at']?.slice(0,10) || '',
-        row['Lineitem name'] || row['Name'] || 'Shopify order',
-        '','',
-        row['Total'] || row['Lineitem price'] || '',
-        '','','',
-        'Website','',
-        '🛍 Shopify','No','',
-        row['Name'] || '',
-      ]
-    }
-  }
+  if (type === 'exactplants') return { type:'sale', data:[
+    row['Date']||new Date().toISOString().slice(0,10),
+    row['Plant name']||row['Plant Name']||'',
+    '',1,
+    row['My price (CAD)']||'',
+    row['Vendor price (CAD)']||'',
+    '','','Exact plant','',
+    row['Paid by buyer']==='Yes'?'📲 E-transfer':'',
+    'No','',
+    `Buyer:${row['Buyer']||''} · Vendor:${row['Vendor']||''} · ${row['Notes']||''}`.trim()
+  ]}
+  if (type === 'consignment') return { type:'inventory', data:[
+    row['Plant name']||row['Plant Name']||'',
+    row['Type']||'',
+    row['Qty received']||row['Qty']||1,
+    row['Date received']||row['Date']||'',
+    row['Price per unit (CAD)']||'',
+    '','',
+    'Okanoka',
+    row['Shipment ID']||'',
+    row['Mother plant?']||'No',
+    row['Status']||'Received',
+    row['Date received']||'',
+    '','','No',
+    row['Notes']||'',
+  ]}
+  if (type === 'expenses') return { type:'expense', data:[
+    row['Date']||'',
+    row['Category']||'',
+    row['Amount (CAD)']||row['Amount']||'',
+    row['Description']||'',
+    row['Shipment ID']||'',
+    row['Notes']||'',
+  ]}
+  if (type === 'shopify') return { type:'sale', data:[
+    (row['Created at']||'').slice(0,10),
+    row['Lineitem name']||row['Name']||'Shopify order',
+    '','',
+    row['Total']||row['Lineitem price']||'',
+    '','','','Website','',
+    '🛍 Shopify','No','',
+    row['Name']||'',
+  ]}
+}
+
+function getRowDisplay(type, row) {
+  const name   = row['Plant name']||row['Plant Name']||row['Lineitem name']||row['Description']||row['Name']||'—'
+  const amount = row['My price (CAD)']||row['Amount (CAD)']||row['Total']||row['Vendor price (CAD)']||''
+  const buyer  = row['Buyer']||''
+  const date   = row['Date received']||row['Date paid']||row['Date']||(row['Created at']||'').slice(0,10)||''
+  return { name, amount, buyer, date }
 }
 
 export default function Import() {
   const navigate  = useNavigate()
   const fileRef   = useRef()
-  const [step, setStep]     = useState('choose')
-  const [type, setType]     = useState(null)
-  const [rows, setRows]     = useState([])
-  const [errors, setErrors] = useState([])
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved]   = useState(0)
-  const [total, setTotal]   = useState(0)
+  const [step, setStep]           = useState('choose')
+  const [type, setType]           = useState(null)
+  const [rows, setRows]           = useState([])
+  const [classified, setClassified] = useState([]) // { row, status: 'new'|'duplicate'|'exists', key }
+  const [errors, setErrors]       = useState([])
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(0)
+  const [total, setTotal]         = useState(0)
+  const [lastDates, setLastDates] = useState({}) // { sales, expenses, inventory }
+  const [loadingDates, setLoadingDates] = useState(false)
+
+  useEffect(() => {
+    // Load last entry dates when component mounts
+    async function loadLastDates() {
+      setLoadingDates(true)
+      try {
+        const [sales, expenses, inventory] = await Promise.all([getSales(), getExpenses(), getInventory()])
+        const lastDate = arr => {
+          const dates = arr.map(r => r['Date']||r['Date received']||r['Date Added']||'').filter(Boolean).sort()
+          return dates.length ? dates[dates.length-1] : null
+        }
+        setLastDates({
+          sales:     lastDate(sales),
+          expenses:  lastDate(expenses),
+          inventory: lastDate(inventory),
+          salesRows: sales,
+          expensesRows: expenses,
+          inventoryRows: inventory,
+        })
+      } catch(err) { console.error(err) }
+      finally { setLoadingDates(false) }
+    }
+    loadLastDates()
+  }, [])
 
   function handleFile(e) {
     const file = e.target.files[0]
@@ -124,6 +148,26 @@ export default function Import() {
       const parsed = parseCSV(ev.target.result)
       if (!parsed.length) { setErrors(['Could not read file — make sure it is saved as CSV']); return }
       const clean = cleanRows(parsed)
+
+      // Classify each row
+      const existingRows = type==='expenses' ? (lastDates.expensesRows||[])
+        : type==='consignment' ? (lastDates.inventoryRows||[])
+        : (lastDates.salesRows||[])
+
+      const existingKeys = new Set(existingRows.map(r => getExistingKey(type, r)))
+
+      const result = clean.map(row => {
+        const key = getRowKey(type, row)
+        // Check exact match
+        if (existingKeys.has(key)) return { row, status:'exists', key }
+        // Check partial match (same date + name, different amount)
+        const partial = key.split('|').slice(0,2).join('|')
+        const partialMatch = [...existingKeys].some(k => k.split('|').slice(0,2).join('|') === partial)
+        if (partialMatch) return { row, status:'duplicate', key }
+        return { row, status:'new', key }
+      })
+
+      setClassified(result)
       setRows(clean)
       setErrors([])
       setStep('preview')
@@ -131,16 +175,21 @@ export default function Import() {
     reader.readAsText(file)
   }
 
-  async function handleImport() {
+  async function handleImport(skipExisting) {
+    const toImport = skipExisting
+      ? classified.filter(c => c.status === 'new')
+      : classified.filter(c => c.status !== 'exists')
+
     setSaving(true)
-    setTotal(rows.length)
+    setTotal(toImport.length)
     let count = 0
     const errs = []
-    for (const row of rows) {
+
+    for (const { row } of toImport) {
       try {
         const mapped = mapRow(type, row)
         if (!mapped) continue
-        if (mapped.type === 'sale')      await addSale(mapped.data)
+        if (mapped.type === 'sale')           await addSale(mapped.data)
         else if (mapped.type === 'expense')   await addExpense(mapped.data)
         else if (mapped.type === 'inventory') await addInventory(mapped.data)
         count++
@@ -149,23 +198,66 @@ export default function Import() {
         errs.push(`Row ${count+1}: ${err.message}`)
       }
     }
+
     setSaving(false)
     if (errs.length) setErrors(errs)
     setStep('done')
   }
 
+  const newCount       = classified.filter(c => c.status==='new').length
+  const duplicateCount = classified.filter(c => c.status==='duplicate').length
+  const existsCount    = classified.filter(c => c.status==='exists').length
+
   const tpl = TEMPLATE_TYPES.find(t => t.key === type)
 
-  return (
-    <div style={{ paddingBottom:40 }}>
-      <TopBar title="Import data" subtitle="Upload your existing records" showBack={true} />
+  function formatDate(d) {
+    if (!d) return 'No entries yet'
+    return new Date(d).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })
+  }
 
+  const relevantDate = type==='expenses' ? lastDates.expenses
+    : type==='consignment' ? lastDates.inventory
+    : lastDates.sales
+
+  return (
+    <div style={{ paddingBottom:40, fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif' }}>
+
+      {/* TOP BAR */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px 12px', borderBottom:'0.5px solid #e5e5e5', position:'sticky', top:0, background:'#fff', zIndex:50 }}>
+        <button onClick={() => step==='choose' ? navigate('/') : setStep(step==='preview'?'upload':'choose')}
+          style={{ background:'none', border:'none', cursor:'pointer', fontSize:22, color:'#999', padding:0, minWidth:36, minHeight:36 }}>‹</button>
+        <div>
+          <div style={{ fontSize:17, fontWeight:500 }}>Import data</div>
+          <div style={{ fontSize:12, color:'#999', marginTop:1 }}>Upload your existing records</div>
+        </div>
+      </div>
+
+      {/* CHOOSE */}
       {step === 'choose' && (
         <div style={{ padding:'20px 16px' }}>
-          <SectionTitle>Choose what you're importing</SectionTitle>
+
+          {/* Last entry dates */}
+          {!loadingDates && (
+            <div style={{ background:'#f5f5f5', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
+              <div style={{ fontSize:11, color:'#999', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>Your sheet — last entries</div>
+              {[
+                { label:'Sales',     date: lastDates.sales     },
+                { label:'Expenses',  date: lastDates.expenses  },
+                { label:'Inventory', date: lastDates.inventory },
+              ].map(r => (
+                <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:'0.5px solid #e5e5e5' }}>
+                  <span style={{ fontSize:13, color:'#666' }}>{r.label}</span>
+                  <span style={{ fontSize:13, fontWeight:500, color: r.date?'#1a1a1a':'#ccc' }}>{formatDate(r.date)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontSize:11, color:'#999', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:12 }}>Choose what you're importing</div>
           <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:24 }}>
             {TEMPLATE_TYPES.map(t => (
-              <button key={t.key} onClick={() => { setType(t.key); setStep('upload') }} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:12, cursor:'pointer', textAlign:'left' }}
+              <button key={t.key} onClick={() => { setType(t.key); setStep('upload') }}
+                style={{ display:'flex', alignItems:'center', gap:14, padding:'14px', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:12, cursor:'pointer', textAlign:'left' }}
                 onMouseEnter={e=>e.currentTarget.style.background='#f9f9f9'}
                 onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                 <div style={{ width:46, height:46, borderRadius:10, background:t.color+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0 }}>{t.icon}</div>
@@ -177,18 +269,27 @@ export default function Import() {
               </button>
             ))}
           </div>
-          <div style={{ background:'#f5f5f5', borderRadius:12, padding:14, fontSize:13, color:'#666', lineHeight:1.6 }}>
-            📋 Need the import templates? Ask Claude to download <strong style={{ color:'#1a1a1a' }}>Sandras Tropicals Import Templates v2</strong> from this chat.
+
+          <div style={{ background:'#f5f5f5', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#666', lineHeight:1.6 }}>
+            📋 Need templates? Ask Claude for <strong style={{ color:'#1a1a1a' }}>Sandras Tropicals Import Templates v2</strong>
           </div>
         </div>
       )}
 
+      {/* UPLOAD */}
       {step === 'upload' && tpl && (
         <div style={{ padding:'20px 16px' }}>
-          <div style={{ background:tpl.color+'12', border:`0.5px solid ${tpl.color}44`, borderRadius:12, padding:14, marginBottom:20 }}>
+          <div style={{ background:tpl.color+'12', border:`0.5px solid ${tpl.color}44`, borderRadius:12, padding:14, marginBottom:16 }}>
             <div style={{ fontSize:14, fontWeight:500, color:tpl.color, marginBottom:4 }}>{tpl.icon} {tpl.label}</div>
             <div style={{ fontSize:13, color:'#666' }}>{tpl.desc}</div>
           </div>
+
+          {/* Show last entry date for this type */}
+          {relevantDate && (
+            <div style={{ background:'#E8F5E9', border:'0.5px solid #1D9E75', borderRadius:8, padding:'10px 13px', marginBottom:16, fontSize:13, color:'#0F6E56' }}>
+              ℹ️ Your sheet already has data up to <strong>{formatDate(relevantDate)}</strong> — import data after this date to avoid duplicates
+            </div>
+          )}
 
           <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:12, color:'#999', marginBottom:8 }}>Required columns:</div>
@@ -199,7 +300,8 @@ export default function Import() {
             </div>
           </div>
 
-          <div onClick={() => fileRef.current.click()} style={{ border:'2px dashed #e5e5e5', borderRadius:12, padding:'40px 24px', textAlign:'center', cursor:'pointer', background:'#f9f9f9', marginBottom:16 }}
+          <div onClick={() => fileRef.current.click()}
+            style={{ border:'2px dashed #e5e5e5', borderRadius:12, padding:'40px 24px', textAlign:'center', cursor:'pointer', background:'#f9f9f9', marginBottom:16 }}
             onMouseEnter={e=>{e.currentTarget.style.borderColor='#1D9E75';e.currentTarget.style.background='#f0fdf8'}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor='#e5e5e5';e.currentTarget.style.background='#f9f9f9'}}>
             <div style={{ fontSize:40, marginBottom:10 }}>📂</div>
@@ -210,48 +312,70 @@ export default function Import() {
 
           {errors.map((e,i) => <div key={i} style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:8 }}>{e}</div>)}
 
-          <div style={{ fontSize:12, color:'#999', background:'#f5f5f5', borderRadius:8, padding:'10px 12px', lineHeight:1.6, marginBottom:12 }}>
+          <div style={{ fontSize:12, color:'#999', background:'#f5f5f5', borderRadius:8, padding:'10px 12px', lineHeight:1.6 }}>
             <strong style={{ color:'#666' }}>How to save as CSV:</strong> In Excel → File → Save As → CSV. In Google Sheets → File → Download → CSV.
           </div>
-          <button onClick={() => setStep('choose')} style={{ width:'100%', padding:13, background:'none', border:'0.5px solid #e5e5e5', borderRadius:12, fontSize:14, color:'#999', cursor:'pointer' }}>← Back</button>
         </div>
       )}
 
+      {/* PREVIEW */}
       {step === 'preview' && (
         <div style={{ padding:'20px 16px' }}>
-          <div style={{ background:'#E8F5E9', border:'0.5px solid #1D9E75', borderRadius:10, padding:'12px 14px', marginBottom:16 }}>
-            <div style={{ fontSize:14, fontWeight:500, color:'#1D9E75', marginBottom:2 }}>✓ {rows.length} rows found</div>
-            <div style={{ fontSize:12, color:'#2a6e4a' }}>Review before importing to your Google Sheet</div>
+
+          {/* Summary pills */}
+          <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+            <div style={{ padding:'8px 14px', borderRadius:20, background:'#E8F5E9', fontSize:13, fontWeight:500, color:'#0F6E56' }}>✅ {newCount} new</div>
+            {duplicateCount > 0 && <div style={{ padding:'8px 14px', borderRadius:20, background:'#FAEEDA', fontSize:13, fontWeight:500, color:'#854F0B' }}>⚠️ {duplicateCount} possible duplicate</div>}
+            {existsCount > 0 && <div style={{ padding:'8px 14px', borderRadius:20, background:'#f5f5f5', fontSize:13, fontWeight:500, color:'#999' }}>✓ {existsCount} already exists</div>}
           </div>
 
-          <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20, maxHeight:380, overflowY:'auto' }}>
-            {rows.slice(0,25).map((row,i) => {
-              const name   = row['Plant name']||row['Plant Name']||row['Lineitem name']||row['Description']||row['Name']||`Row ${i+1}`
-              const amount = row['My price (CAD)']||row['Amount (CAD)']||row['Total']||row['Vendor price (CAD)']||''
-              const buyer  = row['Buyer']||''
-              const date   = row['Date received']||row['Date paid']||row['Date']||row['Created at']?.slice(0,10)||''
+          {duplicateCount > 0 && (
+            <div style={{ background:'#FAEEDA', borderLeft:'3px solid #EF9F27', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#633806', marginBottom:16, lineHeight:1.5 }}>
+              {duplicateCount} row{duplicateCount>1?'s look':'s looks'} similar to entries already in your sheet. Review below — you can choose to skip or import them.
+            </div>
+          )}
+
+          {/* Row list */}
+          <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20, maxHeight:400, overflowY:'auto' }}>
+            {classified.map(({row, status}, i) => {
+              const d = getRowDisplay(type, row)
+              const statusConfig = {
+                new:       { bg:'#fff',    border:'#e5e5e5', badge:'#E8F5E9', badgeText:'#0F6E56', label:'New'       },
+                duplicate: { bg:'#FFFDF5', border:'#EF9F27', badge:'#FAEEDA', badgeText:'#854F0B', label:'Review'    },
+                exists:    { bg:'#fafafa', border:'#e5e5e5', badge:'#f5f5f5', badgeText:'#999',    label:'Skip'      },
+              }[status]
               return (
-                <div key={i} style={{ background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:10, padding:'11px 13px', display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ width:24, height:24, borderRadius:'50%', background:'#1D9E75', color:'#fff', fontSize:11, fontWeight:500, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</div>
+                <div key={i} style={{ background:statusConfig.bg, border:`0.5px solid ${statusConfig.border}`, borderRadius:10, padding:'11px 13px', display:'flex', alignItems:'center', gap:10, opacity:status==='exists'?0.6:1 }}>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:500 }}>{name}</div>
-                    <div style={{ fontSize:11, color:'#999', marginTop:2 }}>{[buyer, date, amount?`CA$${amount}`:''].filter(Boolean).join(' · ')}</div>
+                    <div style={{ fontSize:13, fontWeight:500 }}>{d.name}</div>
+                    <div style={{ fontSize:11, color:'#999', marginTop:2 }}>{[d.buyer, d.date, d.amount?`CA$${d.amount}`:''].filter(Boolean).join(' · ')}</div>
                   </div>
+                  <span style={{ fontSize:11, padding:'3px 9px', borderRadius:20, background:statusConfig.badge, color:statusConfig.badgeText, fontWeight:500, flexShrink:0 }}>{statusConfig.label}</span>
                 </div>
               )
             })}
-            {rows.length > 25 && <div style={{ fontSize:13, color:'#999', textAlign:'center', padding:8 }}>+ {rows.length-25} more rows</div>}
           </div>
 
           {errors.map((e,i) => <div key={i} style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:8 }}>{e}</div>)}
 
-          <PrimaryButton onClick={handleImport} disabled={saving}>
-            {saving ? `Importing… ${saved}/${total}` : `Import ${rows.length} rows to Google Sheet`}
-          </PrimaryButton>
-          <button onClick={() => setStep('upload')} style={{ width:'100%', padding:13, background:'none', border:'0.5px solid #e5e5e5', borderRadius:12, fontSize:14, color:'#999', cursor:'pointer', marginTop:10 }}>← Back</button>
+          {/* Import buttons */}
+          <button onClick={() => handleImport(true)} disabled={saving||newCount===0}
+            style={{ width:'100%', padding:14, background:saving||newCount===0?'#ccc':'#1D9E75', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:500, cursor:saving||newCount===0?'default':'pointer', marginBottom:8, minHeight:50 }}>
+            {saving ? `Importing… ${saved}/${total}` : `Import ${newCount} new rows`}
+          </button>
+
+          {duplicateCount > 0 && (
+            <button onClick={() => handleImport(false)} disabled={saving}
+              style={{ width:'100%', padding:13, background:'none', border:'0.5px solid #EF9F27', borderRadius:12, fontSize:14, color:'#854F0B', cursor:'pointer', marginBottom:8, minHeight:48 }}>
+              Import all including {duplicateCount} possible duplicate{duplicateCount>1?'s':''}
+            </button>
+          )}
+
+          <button onClick={() => setStep('upload')} style={{ width:'100%', padding:13, background:'none', border:'0.5px solid #e5e5e5', borderRadius:12, fontSize:14, color:'#999', cursor:'pointer', minHeight:48 }}>← Back</button>
         </div>
       )}
 
+      {/* DONE */}
       {step === 'done' && (
         <div style={{ padding:'20px 16px', textAlign:'center' }}>
           <div style={{ fontSize:52, marginBottom:16 }}>✅</div>
@@ -263,8 +387,14 @@ export default function Import() {
               {errors.map((e,i) => <div key={i} style={{ fontSize:12, color:'#7a2020', marginBottom:4 }}>{e}</div>)}
             </div>
           )}
-          <PrimaryButton onClick={() => { setStep('choose'); setRows([]); setErrors([]); setSaved(0) }}>Import more</PrimaryButton>
-          <button onClick={() => navigate('/')} style={{ width:'100%', padding:13, background:'none', border:'none', fontSize:14, color:'#999', cursor:'pointer', marginTop:10 }}>Back to home</button>
+          <button onClick={() => { setStep('choose'); setRows([]); setClassified([]); setErrors([]); setSaved(0) }}
+            style={{ width:'100%', padding:14, background:'#1D9E75', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:500, cursor:'pointer', marginBottom:10, minHeight:50 }}>
+            Import more
+          </button>
+          <button onClick={() => navigate('/')}
+            style={{ width:'100%', padding:13, background:'none', border:'none', fontSize:14, color:'#999', cursor:'pointer' }}>
+            Back to home
+          </button>
         </div>
       )}
     </div>
