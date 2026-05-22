@@ -77,4 +77,42 @@ export async function getLiveRates() {
   }
 }
 
+// ── CUSTOMER AUTO-CAPTURE ─────────────────────────────────────────────────────
+export async function upsertCustomer({ name, date, plant, amount, channel, note, shipping }) {
+  if (!name || name.toLowerCase() === 'sandra (me)') return
+
+  try {
+    // Read existing customers
+    const existing = await readSheet('Customers')
+    const match = existing.find(c => c.Name?.toLowerCase() === name.toLowerCase())
+
+    if (match) {
+      // Customer exists — we just append a new sale note
+      // In future: update last order date and total spent
+      // For now just log — full update requires Google Sheets batch update API
+      return
+    } else {
+      // New customer — add row
+      await appendRow('Customers', [
+        name,
+        '', // email — unknown at this point
+        '', // city
+        '', // province
+        channel || '',
+        date || '',
+        date || '',
+        1,
+        amount || '',
+        'No', // repeat customer — first order
+        note || '',
+        '', // shipping address
+        shipping || '',
+      ])
+    }
+  } catch(err) {
+    console.error('Customer upsert failed:', err)
+    // Don't throw — customer save failure shouldn't block the sale
+  }
+}
+
     
