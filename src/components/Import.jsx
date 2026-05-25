@@ -82,6 +82,16 @@ function getExistingKey(type, row) {
   return ''
 }
 
+function getShopifyExistingKey(row) {
+  // Match against Sales tab: Date in col A, Plant Name in col B, Sale Price in col F
+  return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${String(row['Sale Price (CAD)']||'')}`
+}
+
+function getShopifyIncomingKey(row) {
+  // Match incoming Shopify row: date from Created at, plant from Lineitem name, price from Lineitem price
+  return `${(row['Created at']||'').slice(0,10)}|${(row['Lineitem name']||'').toLowerCase()}|${String(row['Lineitem price']||'')}`
+}
+
 function mapRow(type, row) {
   // ── EXACT PLANTS ──────────────────────────────────────────────────────────
   if (type === 'exactplants') {
@@ -268,12 +278,14 @@ export default function Import() {
         : type==='consignment' ? (lastDates.inventoryRows||[])
         : (lastDates.salesRows||[])
 
-      const existingKeys = new Set(existingRows.map(r => getExistingKey(type, r)))
+      const existingKeys = new Set(existingRows.map(r => 
+        type === 'shopify' ? getShopifyExistingKey(r) : getExistingKey(type, r)
+      ))
 
       const result = clean.map(row => {
         const mapped = mapRow(type, row)
         if (!mapped) return null
-        const key = getRowKey(type, row)
+        const key = type === 'shopify' ? getShopifyIncomingKey(row) : getRowKey(type, row)
         if (existingKeys.has(key)) return { row, status:'exists', key }
         const partial = key.split('|').slice(0,2).join('|')
         const partialMatch = [...existingKeys].some(k => k.split('|').slice(0,2).join('|') === partial)
