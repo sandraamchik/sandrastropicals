@@ -19,26 +19,22 @@ const REQUIRED_COLS = {
 // Sales tab columns (in order):
 // Date | Plant Name | Customer | Vendor | Qty | Sale Price (CAD) | Cost of Plant (CAD) | Margin $ | Margin % | Channel | Show Name | Payment | Cash (CRA exclude) | Shipment ID | Notes
 function saleRow({ date, plant, customer, vendor, qty, salePrice, costPrice, channel, showName, payment, cash, shipmentId, notes }) {
-  const margin = salePrice && costPrice ? (parseFloat(salePrice) - parseFloat(costPrice)).toFixed(2) : ''
-  const marginPct = salePrice && costPrice && parseFloat(salePrice) > 0
-    ? ((parseFloat(salePrice) - parseFloat(costPrice)) / parseFloat(salePrice) * 100).toFixed(1) + '%'
-    : ''
   return [
-    date || '',
-    plant || '',
-    customer || '',
-    vendor || '',
-    qty || 1,
-    salePrice || '',
-    costPrice || '',
-    margin,
-    marginPct,
-    channel || '',
-    showName || '',
-    payment || '',
-    cash || 'No',
-    shipmentId || '',
-    notes || '',
+    date || '',       // A: Date
+    plant || '',      // B: Plant Name
+    customer || '',   // C: Customer
+    vendor || '',     // D: Vendor
+    qty || 1,         // E: Qty
+    salePrice || '',  // F: Sale Price (CAD)
+    costPrice || '',  // G: Cost of Plant (CAD)
+    '',               // H: Margin $ — leave blank, formula in sheet calculates it
+    '',               // I: Margin % — leave blank, formula in sheet calculates it
+    channel || '',    // J: Channel
+    showName || '',   // K: Show Name
+    payment || '',    // L: Payment
+    cash || 'No',     // M: Cash (CRA exclude)
+    shipmentId || '', // N: Shipment ID
+    notes || '',      // O: Notes
   ]
 }
 
