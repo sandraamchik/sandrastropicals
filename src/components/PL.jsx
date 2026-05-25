@@ -1,7 +1,8 @@
-    import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSales, getExpenses } from '../services/sheets.js'
 import { TopBar, SectionTitle, FAB } from './Nav.jsx'
+import SGSaleModal from './SGSaleModal.jsx'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const CHANNELS = ['Show','Website','Instagram','Facebook','Imports','Other']
@@ -12,13 +13,16 @@ export default function PL() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading]   = useState(true)
   const [activeMonth, setActiveMonth] = useState(new Date().getMonth())
-  const GOAL = parseFloat(localStorage.getItem('goal')||'4500')
+  const [showSG, setShowSG] = useState(false)
 
-  useEffect(() => {
+  useEffect(() => { loadData() }, [])
+
+  async function loadData() {
+    setLoading(true)
     Promise.all([getSales(), getExpenses()])
       .then(([s,e]) => { setSales(s); setExpenses(e); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }
 
   const year = new Date().getFullYear()
   const ms = sales.filter(s => { const d=new Date(s.Date); return d.getMonth()===activeMonth&&d.getFullYear()===year })
@@ -36,7 +40,14 @@ export default function PL() {
 
   return (
     <div style={{ paddingBottom:100 }}>
-      <TopBar title="P&L" subtitle={`${MONTHS[activeMonth]} ${year}`} showBack={true} />
+      <TopBar title="P&L" subtitle={`${MONTHS[activeMonth]} ${year}`} showBack={true}
+        right={
+          <button onClick={() => setShowSG(true)} style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, background: '#1D9E75', color: '#fff', border: 'none', cursor: 'pointer', minHeight: 36 }}>
+            🧪 Log SG
+          </button>
+        }
+      />
+      {showSG && <SGSaleModal onClose={() => setShowSG(false)} onSaved={loadData} />}
 
       <div style={{ display:'flex', gap:6, padding:'12px 16px', overflowX:'auto', scrollbarWidth:'none', borderBottom:'0.5px solid #f0f0f0' }}>
         {MONTHS.map((m,i) => (
@@ -110,5 +121,3 @@ export default function PL() {
     </div>
   )
 }
-
-    
