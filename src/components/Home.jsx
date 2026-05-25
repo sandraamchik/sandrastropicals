@@ -1,6 +1,7 @@
     import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSales, getExpenses, addSale, addExpense, upsertCustomer } from '../services/sheets.js'
+import SGSaleModal from './SGSaleModal.jsx'
 
 const GOAL = parseFloat(localStorage.getItem('goal') || '4500')
 const CHANNELS = ['Show','Website','Instagram','Facebook','Exact plant','Other']
@@ -135,6 +136,7 @@ export default function Home({ onSignOut }) {
   const [recent, setRecent]   = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(null)
+  const [showSG, setShowSG]   = useState(false)
   const [saving, setSaving]   = useState(false)
 
   // Sale state — using refs to avoid re-render on each keystroke
@@ -265,6 +267,7 @@ export default function Home({ onSignOut }) {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, padding:'0 16px', marginBottom:20 }}>
         {[
           { label:'Log a sale',  icon:'💸', action:() => setModal('sale')       },
+          { label:'🧪 Log SG',   icon:'🧪', action:() => setShowSG(true)        },
           { label:'📷 Photo log', icon:'📷', action:() => navigate('/photolog')  },
           { label:'Log expense', icon:'🧾', action:() => setModal('expense')    },
           { label:'Import data', icon:'📥', action:() => navigate('/import')    },
@@ -306,6 +309,8 @@ export default function Home({ onSignOut }) {
         fontSize:30, fontWeight:300, display:'flex', alignItems:'center', justifyContent:'center',
         boxShadow:'0 4px 18px rgba(29,158,117,0.45)', zIndex:90
       }}>+</button>
+
+      {showSG && <SGSaleModal onClose={() => setShowSG(false)} onSaved={loadData} />}
 
       {/* SALE MODAL */}
       {modal === 'sale' && (
