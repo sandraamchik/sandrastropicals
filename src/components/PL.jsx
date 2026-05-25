@@ -41,13 +41,7 @@ export default function PL() {
 
   return (
     <div style={{ paddingBottom:100 }}>
-      <TopBar title="P&L" subtitle={`${MONTHS[activeMonth]} ${year}`} showBack={true}
-        right={
-          <button onClick={() => setShowSG(true)} style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, background: '#1D9E75', color: '#fff', border: 'none', cursor: 'pointer', minHeight: 36 }}>
-            🧪 Log SG
-          </button>
-        }
-      />
+      <TopBar title="P&L" subtitle={`${MONTHS[activeMonth]} ${year}`} showBack={true} />
       {showSG && <SGSaleModal onClose={() => setShowSG(false)} onSaved={loadData} />}
 
       <div style={{ display:'flex', gap:6, padding:'12px 16px', overflowX:'auto', scrollbarWidth:'none', borderBottom:'0.5px solid #f0f0f0' }}>
