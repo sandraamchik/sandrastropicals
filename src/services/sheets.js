@@ -54,9 +54,10 @@ export async function appendRow(tabName, rowData) {
   }
   if (!token) throw new Error('Not signed in — please sign in to save data')
 
-  // Google Sheets append API requires a range e.g. Sales!A1:O1
-  const range = encodeURIComponent(`${tabName}!A1`)
-  const url = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
+  // Google Sheets append API requires range like 'Tab Name'!A1
+  const safeTab = tabName.startsWith("'") ? tabName : `'${tabName}'`
+  const range   = encodeURIComponent(`${safeTab}!A1`)
+  const url     = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
