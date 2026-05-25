@@ -309,30 +309,26 @@ export default function Import() {
     setTotal(toImport.length)
     let count = 0
     const errs = []
-    const savedCustomers = new Set()
 
     for (const { row } of toImport) {
       try {
         const mapped = mapRow(type, row)
-        if (!mapped) continue
+        if (!mapped) { count++; setSaved(count); continue }
 
         if (mapped.type === 'sale')           await addSale(mapped.data)
         else if (mapped.type === 'expense')   await addExpense(mapped.data)
         else if (mapped.type === 'inventory') await addInventory(mapped.data)
 
-        if (mapped.customer?.name && !savedCustomers.has(mapped.customer.name)) {
-          try {
-            await upsertCustomer(mapped.customer)
-            savedCustomers.add(mapped.customer.name)
-          } catch(e) { /* don't block import */ }
-        }
-
         count++
         setSaved(count)
-        // Rate limit: stay under 60 writes/min
+        // Stay under Google's 60 writes/min limit
         await new Promise(r => setTimeout(r, 1100))
       } catch(err) {
         errs.push(`Row ${count+1}: ${err.message}`)
+        // If quota error, wait longer before continuing
+        if (err.message?.includes('Quota') || err.message?.includes('quota')) {
+          await new Promise(r => setTimeout(r, 5000))
+        }
       }
     }
 
