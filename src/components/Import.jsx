@@ -326,7 +326,7 @@ export default function Import() {
           {!loadingDates && (
             <div style={{ background:'#f5f5f5', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
               <div style={{ fontSize:11, color:'#999', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>Last entries in your sheet</div>
-              {[{label:'Sales',lastDates.sales},{label:'Expenses',lastDates.expenses},{label:'Inventory',lastDates.inventory}].map(([label,date]) => (
+              {[{label:'Sales',date:lastDates.sales},{label:'Expenses',date:lastDates.expenses},{label:'Inventory',date:lastDates.inventory}].map(({label,date}) => (
                 <div key={label} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:'0.5px solid #e5e5e5' }}>
                   <span style={{ fontSize:13, color:'#666' }}>{label}</span>
                   <span style={{ fontSize:13, fontWeight:500, color:date?'#1a1a1a':'#ccc' }}>{formatDate(date)}</span>
