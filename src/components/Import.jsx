@@ -282,6 +282,11 @@ export default function Import() {
 
         count++
         setSaved(count)
+
+        // Rate limit: Google Sheets allows ~60 writes/min
+        // Wait 1.1s every write to stay safely under the limit
+        await new Promise(r => setTimeout(r, 1100))
+
       } catch(err) {
         errs.push(`Row ${count+1}: ${err.message}`)
       }
@@ -421,7 +426,9 @@ export default function Import() {
 
           <button onClick={() => handleImport(true)} disabled={saving||newCount===0}
             style={{ width:'100%', padding:14, background:saving||newCount===0?'#ccc':'#1D9E75', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:500, cursor:saving||newCount===0?'default':'pointer', marginBottom:8, minHeight:50 }}>
-            {saving ? `Importing… ${saved}/${total}` : `Import ${newCount} new rows`}
+            {saving
+              ? `Importing… ${saved}/${total} (~${Math.ceil((total-saved)*1.1/60)} min left)`
+              : `Import ${newCount} new rows (~${Math.ceil(newCount*1.1/60)} min)`}
           </button>
 
           {duplicateCount>0 && (
