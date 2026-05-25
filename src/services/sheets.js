@@ -43,7 +43,6 @@ export async function readSheet(tabName) {
       headerRow.slice(0, lastValidCol + 1).map((h, i) => [h || `col${i}`, row[i] ?? ''])
     ))
 }
-}
 
 // ── WRITE (OAuth — auto-refreshes token) ─────────────────────────────────────
 export async function appendRow(tabName, rowData) {
