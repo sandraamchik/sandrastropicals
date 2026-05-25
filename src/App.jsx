@@ -12,6 +12,7 @@ import Suppliers from './components/Suppliers.jsx'
 import Expenses from './components/Expenses.jsx'
 import Settings from './components/Settings.jsx'
 import Import from './components/Import.jsx'
+import PhotoLog from './components/PhotoLog.jsx'
 
 const NAV = [
   { path:'/',          icon:'🏠', label:'Home'      },
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="/expenses"  element={<Layout><Expenses /></Layout>} />
         <Route path="/settings"  element={<Layout><Settings onSignOut={() => setSignedIn(false)} /></Layout>} />
         <Route path="/import"    element={<Layout><Import /></Layout>} />
+        <Route path="/photolog"  element={<Layout><PhotoLog /></Layout>} />
       </Routes>
     </BrowserRouter>
   )
