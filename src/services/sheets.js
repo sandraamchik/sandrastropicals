@@ -54,8 +54,9 @@ export async function appendRow(tabName, rowData) {
   }
   if (!token) throw new Error('Not signed in — please sign in to save data')
 
-  // Use tab name only in append URL — Google finds the last row automatically
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
+  // Google Sheets append API requires a range e.g. Sales!A1:O1
+  const range = encodeURIComponent(`${tabName}!A1`)
+  const url = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
