@@ -1,6 +1,6 @@
     import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSales, getExpenses, addSale, addExpense, upsertCustomer } from '../services/sheets.js'
+import { getSales, getExpenses, getPL, addSale, addExpense, upsertCustomer } from '../services/sheets.js'
 import SGSaleModal from './SGSaleModal.jsx'
 
 const GOAL = parseFloat(localStorage.getItem('goal') || '4500')
@@ -150,11 +150,42 @@ export default function Home({ onSignOut }) {
   const expRef = useRef({ category:'Show / event fee', amount:'', description:'', date:new Date().toISOString().slice(0,10) })
   const [expCat, setExpCat] = useState('Show / event fee')
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    async function load() {
+      try {
+        const [sales, expenses, pl] = await Promise.all([getSales(), getExpenses(), getPL()])
+        const now = new Date()
+        const m = now.getMonth(), y = now.getFullYear()
+        const ms = sales.filter(s => { const d=new Date(s.Date); return d.getMonth()===m&&d.getFullYear()===y })
+        const me = expenses.filter(e => { const d=new Date(e.Date)||new Date(); return d.getMonth()===m&&d.getFullYear()===y })
+        const revenue  = ms.reduce((s,r)=>s+parseFloat(r['Sale Price (CAD)']||0),0)
+        const expTotal = me.reduce((s,r)=>s+parseFloat(r['Amount (CAD)']||0),0)
+        const profit   = revenue-expTotal
+        const margin   = revenue>0?Math.round((profit/revenue)*100):0
+        const budget   = Math.max(0,Math.round(profit*0.2))
+
+        // Try to get revenue from P&L Summary for current month
+        // P&L Summary months: Dec2025=row0, Jan2026=row1... find matching month label
+        const monthLabel = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]} ${y}`
+        const plRow = pl.find(r => r['Month'] === monthLabel)
+        const plRevenue = plRow ? parseFloat(plRow['Total Revenue']||0) : revenue
+
+        setStats({ revenue: plRevenue||revenue, expenses:expTotal, margin, budget })
+        setFlags(ms.filter(s => !s['Sale Price (CAD)']))
+        setRecent([
+          ...ms.slice(-3).map(s=>({type:'sale',name:s['Plant Name']||'Sale',meta:`${s.Channel||''}${s.Payment?' · '+s.Payment:''}`,amount:parseFloat(s['Sale Price (CAD)']||0)})),
+          ...me.slice(-2).map(e=>({type:'expense',name:e.Description||e.Category,meta:e.Category,amount:parseFloat(e['Amount (CAD)']||0)}))
+        ].slice(-5))
+      } catch(err) { console.error(err) }
+      finally { setLoading(false) }
+    }
+    load()
+  }, [])
 
   async function loadData() {
+    setLoading(true)
     try {
-      const [sales, expenses] = await Promise.all([getSales(), getExpenses()])
+      const [sales, expenses, pl] = await Promise.all([getSales(), getExpenses(), getPL()])
       const now = new Date()
       const m = now.getMonth(), y = now.getFullYear()
       const ms = sales.filter(s => { const d=new Date(s.Date); return d.getMonth()===m&&d.getFullYear()===y })
@@ -162,7 +193,10 @@ export default function Home({ onSignOut }) {
       const revenue  = ms.reduce((s,r)=>s+parseFloat(r['Sale Price (CAD)']||0),0)
       const expTotal = me.reduce((s,r)=>s+parseFloat(r['Amount (CAD)']||0),0)
       const profit   = revenue-expTotal
-      setStats({ revenue, expenses:expTotal, margin:revenue>0?Math.round((profit/revenue)*100):0 })
+      const monthLabel = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]} ${y}`
+      const plRow = pl.find(r => r['Month'] === monthLabel)
+      const plRevenue = plRow ? parseFloat(plRow['Total Revenue']||0) : revenue
+      setStats({ revenue:plRevenue||revenue, expenses:expTotal, margin:revenue>0?Math.round((profit/revenue)*100):0, budget:Math.max(0,Math.round(profit*0.2)) })
       setRecent([
         ...ms.slice(-3).map(s=>({ type:'sale', name:s['Plant Name']||'Sale', meta:`${s.Channel||''}${s.Payment?' · '+s.Payment:''}`, amount:parseFloat(s['Sale Price (CAD)']||0) })),
         ...me.slice(-2).map(e=>({ type:'expense', name:e.Description||e.Category, meta:e.Category, amount:parseFloat(e['Amount (CAD)']||0) }))
@@ -266,14 +300,14 @@ export default function Home({ onSignOut }) {
       <div style={{ fontSize:11, color:'#999', textTransform:'uppercase', letterSpacing:'0.05em', padding:'0 16px', marginBottom:10 }}>Quick add</div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, padding:'0 16px', marginBottom:20 }}>
         {[
-          { label:'Log a sale',  icon:'💸', action:() => setModal('sale')       },
-          { label:'🧪 Log SG',   icon:'🧪', action:() => setShowSG(true)        },
-          { label:'📷 Photo log', icon:'📷', action:() => navigate('/photolog')  },
-          { label:'Log expense', icon:'🧾', action:() => setModal('expense')    },
-          { label:'Import data', icon:'📥', action:() => navigate('/import')    },
-          { label:'Suppliers',   icon:'🌏', action:() => navigate('/suppliers') },
+          { label:'Log a sale',  icon:'💸', action:() => setModal('sale'),    color:'#fff', bg:'#1a1a1a' },
+          { label:'Log SG sale', icon:'🪴', action:() => setShowSG(true),    color:'#fff', bg:'#C2185B' },
+          { label:'Photo log',   icon:'📷', action:() => navigate('/photolog'), color:'#1a1a1a', bg:'#fff' },
+          { label:'Log expense', icon:'🧾', action:() => setModal('expense'), color:'#1a1a1a', bg:'#fff' },
+          { label:'Import data', icon:'📥', action:() => navigate('/import'), color:'#1a1a1a', bg:'#fff' },
+          { label:'Suppliers',   icon:'🌏', action:() => navigate('/suppliers'), color:'#1a1a1a', bg:'#fff' },
         ].map(q => (
-          <button key={q.label} onClick={q.action} style={{ display:'flex', alignItems:'center', gap:10, padding:'14px', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:12, cursor:'pointer', fontSize:14, fontWeight:500, color:'#1a1a1a', minHeight:52 }}>
+          <button key={q.label} onClick={q.action} style={{ display:'flex', alignItems:'center', gap:10, padding:'14px', background:q.bg||'#fff', border:`0.5px solid ${q.bg&&q.bg!=='#fff'?q.bg:'#e5e5e5'}`, borderRadius:12, cursor:'pointer', fontSize:14, fontWeight:500, color:q.color||'#1a1a1a', minHeight:52 }}>
             <span style={{ fontSize:20 }}>{q.icon}</span>{q.label}
           </button>
         ))}
