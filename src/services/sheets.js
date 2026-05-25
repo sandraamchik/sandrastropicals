@@ -14,26 +14,35 @@ export async function readSheet(tabName) {
   const rows = data.values || []
   if (!rows.length) return []
 
-  // Detect if first row is a merged title (only one non-empty cell)
-  // If so, skip it and use row 2 as headers
-  const firstRow = rows[0]
+  // Detect title row — first row where only col A has content (it's a merged title)
+  // Check first 10 columns only to avoid wide Customers tab fooling detection
+  const firstRow = rows[0].slice(0, 10)
   const firstRowPopulated = firstRow.filter(Boolean).length
-  
+
   let headerRow, dataRows
   if (firstRowPopulated <= 1 && rows.length > 1) {
-    // First row is a title — use row 2 as headers, data from row 4 (skip instruction row 3)
+    // First row is a title — use row 2 as headers
+    // Check if row 3 is an instruction row (contains words like YYYY-MM-DD or Auto)
+    const row3 = rows[2] || []
+    const isInstruction = row3.some(c => typeof c === 'string' && (c.includes('YYYY') || c === 'Auto' || c.includes('e.g.')))
     headerRow = rows[1]
-    dataRows  = rows.slice(3) // skip title, headers, instruction row
+    dataRows  = isInstruction ? rows.slice(3) : rows.slice(2)
   } else {
-    // No title row — row 1 is headers
     headerRow = rows[0]
     dataRows  = rows.slice(1)
   }
 
   if (!headerRow) return []
+  // Only use first N headers (non-empty) to avoid wide empty columns
+  const validHeaders = headerRow.map((h, i) => ({ h, i })).filter(x => x.h)
+  const lastValidCol = validHeaders.length ? validHeaders[validHeaders.length - 1].i : headerRow.length
+
   return dataRows
-    .filter(row => row.some(cell => cell !== ''))
-    .map(row => Object.fromEntries(headerRow.map((h, i) => [h, row[i] ?? ''])))
+    .filter(row => row.slice(0, lastValidCol + 1).some(cell => cell !== '' && cell != null))
+    .map(row => Object.fromEntries(
+      headerRow.slice(0, lastValidCol + 1).map((h, i) => [h || `col${i}`, row[i] ?? ''])
+    ))
+}
 }
 
 // ── WRITE (OAuth — auto-refreshes token) ─────────────────────────────────────
@@ -96,7 +105,9 @@ export async function upsertCustomer({ name, email, city, province, phone, shipp
   try {
     const existing = await readSheet('Customers')
     const match = existing.find(c => c['Name']?.toLowerCase() === name.toLowerCase())
-    if (match) return // already exists — future: update last order
+    if (match) return
+    // Write exactly 13 columns matching Customers tab:
+    // Name, Email, City, Province, Source, First Order, Last Order, Total Orders, Total Spent, Repeat Customer, Wishlist/Notes, Shipping Address, Phone
     await appendRow('Customers', [
       name,
       email || '',
