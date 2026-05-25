@@ -16,6 +16,32 @@ const REQUIRED_COLS = {
   shopify:     ['Name','Email','Lineitem name','Lineitem price','Created at'],
 }
 
+// Sales tab columns (in order):
+// Date | Plant Name | Customer | Vendor | Qty | Sale Price (CAD) | Cost of Plant (CAD) | Margin $ | Margin % | Channel | Show Name | Payment | Cash (CRA exclude) | Shipment ID | Notes
+function saleRow({ date, plant, customer, vendor, qty, salePrice, costPrice, channel, showName, payment, cash, shipmentId, notes }) {
+  const margin = salePrice && costPrice ? (parseFloat(salePrice) - parseFloat(costPrice)).toFixed(2) : ''
+  const marginPct = salePrice && costPrice && parseFloat(salePrice) > 0
+    ? ((parseFloat(salePrice) - parseFloat(costPrice)) / parseFloat(salePrice) * 100).toFixed(1) + '%'
+    : ''
+  return [
+    date || '',
+    plant || '',
+    customer || '',
+    vendor || '',
+    qty || 1,
+    salePrice || '',
+    costPrice || '',
+    margin,
+    marginPct,
+    channel || '',
+    showName || '',
+    payment || '',
+    cash || 'No',
+    shipmentId || '',
+    notes || '',
+  ]
+}
+
 function parseCSV(text) {
   const lines = text.trim().split('\n')
   if (lines.length < 2) return []
@@ -49,7 +75,7 @@ function getRowKey(type, row) {
 }
 
 function getExistingKey(type, row) {
-  if (type === 'exactplants') return `${row['Notes']?.match(/Customer: ([^·]+)/)?.[1]?.trim()||''}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
+  if (type === 'exactplants') return `${(row['Customer']||'').toLowerCase()}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
   if (type === 'consignment') return `${row['Date Added']||''}|${(row['Plant Name']||'').toLowerCase()}`
   if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
   if (type === 'shopify')     return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
@@ -59,39 +85,47 @@ function getExistingKey(type, row) {
 function mapRow(type, row) {
   // ── EXACT PLANTS ──────────────────────────────────────────────────────────
   if (type === 'exactplants') {
-    const myPrice     = parseFloat(row['My price']||row['My price (CAD)']||0)
-    const vendorPrice = parseFloat(row['Vendor price']||row['Vendor price (CAD)']||0)
-    const packingFee  = parseFloat(row['Packing fee']||0)
-    const myFee       = parseFloat(row['My fee']||0)
+    const parseP = v => {
+      if (!v) return ''
+      const n = parseFloat(v.toString().replace('CA$','').replace(',','').trim())
+      return isNaN(n) ? '' : n
+    }
     const buyer       = (row['Buyer']||'').trim()
     const vendor      = (row['Vendor']||'').trim()
     const plant       = (row['Plant name']||'').trim()
+    const myPrice     = parseP(row['My price'])
+    const vendorPrice = parseP(row['Vendor price'])
+    const packingFee  = parseP(row['Packing fee']) || 0
     const country     = (row['Country']||'').trim()
-    const paid        = row['Paid']||''
-    const transferred = row['Transferred']||''
-    const date        = row['Date'] || new Date().toISOString().slice(0,10)
+    const paid        = (row['Paid']||'').trim()
+    const date        = (row['Date']||'').trim() || new Date().toISOString().slice(0,10)
+    const comments    = (row['Comments']||row['Notes']||'').trim()
 
     if (!plant && !myPrice) return null
 
-    return { type:'sale', data:[
-      date,
-      plant,
-      '', // type/category - removed
-      1,
-      myPrice||'',
-      vendorPrice||'',
-      myPrice && vendorPrice ? myPrice - vendorPrice - packingFee : '',
-      '',
-      'Exact plant',
-      '',
-      paid==='Yes' ? '📲 E-transfer' : '',
-      'No',
-      '',
-      vendor,  // Vendor column (was Type, now Vendor)
-    ], customer: buyer && buyer.toLowerCase() !== 'sandra (me)' ? {
-      name: buyer, date, channel: 'Exact plant',
-      note: `${plant}${country?' ('+country+')':''}`,
-    } : null}
+    const customer = buyer.toLowerCase().includes('sandra') ? '' : buyer
+
+    return {
+      type: 'sale',
+      data: saleRow({
+        date,
+        plant,
+        customer,
+        vendor,
+        qty: 1,
+        salePrice: myPrice,
+        costPrice: vendorPrice,
+        channel: 'Exact plant',
+        payment: paid === 'Yes' ? '📲 E-transfer' : '',
+        cash: 'No',
+        notes: [
+          country ? `Country: ${country}` : '',
+          packingFee > 0 ? `Packing: CA$${packingFee}` : '',
+          comments,
+        ].filter(Boolean).join(' · '),
+      }),
+      customer: customer ? { name: customer, date, channel: 'Exact plant', note: plant } : null
+    }
   }
 
   // ── CONSIGNMENT ───────────────────────────────────────────────────────────
@@ -127,61 +161,63 @@ function mapRow(type, row) {
 
   // ── SHOPIFY ORDERS EXPORT ─────────────────────────────────────────────────
   if (type === 'shopify') {
-    const product  = row['Lineitem name'] || ''
-    const price    = parseFloat(row['Lineitem price'] || 0)
-    const qty      = parseInt(row['Lineitem quantity'] || 1)
-    const date     = (row['Created at'] || row['Paid at'] || '').slice(0, 10)
-    const order    = row['Name'] || ''
-    const email    = row['Email'] || ''
-    const vendor   = row['Vendor'] || ''  // Okanoka vs Sandra's Tropicals
-    const discount = parseFloat(row['Discount Amount'] || 0)
-    const shipping = parseFloat(row['Shipping'] || 0)
-    const payment  = row['Payment Method'] || ''
+    const product     = row['Lineitem name'] || ''
+    const price       = parseFloat(row['Lineitem price'] || 0)
+    const qty         = parseInt(row['Lineitem quantity'] || 1)
+    const date        = (row['Created at'] || row['Paid at'] || '').slice(0, 10)
+    const order       = row['Name'] || ''
+    const email       = row['Email'] || ''
+    const vendor      = row['Vendor'] || ''
+    const discount    = parseFloat(row['Discount Amount'] || 0)
+    const shipping    = parseFloat(row['Shipping'] || 0)
+    const payment     = row['Payment Method'] || ''
     const billingName = row['Billing Name'] || ''
-    const shippingName = row['Shipping Name'] || ''
-    const customerName = billingName || shippingName || ''
+    const shippingName= row['Shipping Name'] || ''
+    const customerName= billingName || shippingName || ''
 
-    // Skip rows with no product or zero/negative price
     if (!product || price <= 0) return null
 
     const payTag = payment.toLowerCase().includes('paypal') ? '💳 PayPal' : '💳 Card'
-
     const notes = [
       email ? `Email: ${email}` : '',
       discount > 0 ? `Discount: CA$${discount}` : '',
       shipping > 0 ? `Shipping: CA$${shipping}` : '',
     ].filter(Boolean).join(' · ')
 
-    // Customer data — only from rows that have billing info
     const customer = customerName ? {
       name:     customerName,
-      email:    email,
+      email,
       city:     row['Billing City'] || row['Shipping City'] || '',
       province: row['Billing Province Name'] || row['Shipping Province Name'] || '',
       phone:    row['Billing Phone'] || row['Shipping Phone'] || '',
-      shipping: [
-        row['Shipping Address1'], row['Shipping Address2'],
-        row['Shipping City'], row['Shipping Province'], row['Shipping Zip']
-      ].filter(Boolean).join(', '),
+      shipping: [row['Shipping Address1'], row['Shipping Address2'], row['Shipping City'], row['Shipping Province'], row['Shipping Zip']].filter(Boolean).join(', '),
       date,
       channel: 'Website',
-      note: '',
     } : null
 
-    return { type:'sale', data:[
-      date, product, '', qty, price,
-      '','','',
-      'Website','',
-      payTag, 'No',
-      order,
-      vendor,  // goes into Vendor column
-    ], customer}
+    return {
+      type: 'sale',
+      data: saleRow({
+        date,
+        plant:    product,
+        customer: customerName,
+        vendor,
+        qty,
+        salePrice: price,
+        channel:  'Website',
+        payment:  payTag,
+        cash:     'No',
+        shipmentId: order,
+        notes,
+      }),
+      customer,
+    }
   }
 }
 
 function getRowDisplay(type, row) {
   const name   = row['Plant name']||row['Lineitem name']||row['Plant Name']||row['Description']||'—'
-  const amount = row['My price']||row['Lineitem price']||row['Amount (CAD)']||row['Vendor price (CAD)']||''
+  const amount = row['My price']||row['Lineitem price']||row['Amount (CAD)']||''
   const buyer  = row['Buyer']||row['Billing Name']||row['Shipping Name']||''
   const date   = row['Date']||(row['Created at']||'').slice(0,10)||row['Date received']||''
   return { name, amount, buyer, date }
@@ -272,7 +308,6 @@ export default function Import() {
         else if (mapped.type === 'expense')   await addExpense(mapped.data)
         else if (mapped.type === 'inventory') await addInventory(mapped.data)
 
-        // Auto-save customer (once per unique name)
         if (mapped.customer?.name && !savedCustomers.has(mapped.customer.name)) {
           try {
             await upsertCustomer(mapped.customer)
@@ -282,11 +317,8 @@ export default function Import() {
 
         count++
         setSaved(count)
-
-        // Rate limit: Google Sheets allows ~60 writes/min
-        // Wait 1.1s every write to stay safely under the limit
+        // Rate limit: stay under 60 writes/min
         await new Promise(r => setTimeout(r, 1100))
-
       } catch(err) {
         errs.push(`Row ${count+1}: ${err.message}`)
       }
@@ -382,7 +414,7 @@ export default function Import() {
             onMouseLeave={e=>{e.currentTarget.style.borderColor='#e5e5e5';e.currentTarget.style.background='#f9f9f9'}}>
             <div style={{ fontSize:40, marginBottom:10 }}>📂</div>
             <div style={{ fontSize:15, fontWeight:500, marginBottom:6 }}>Tap to upload CSV</div>
-            <div style={{ fontSize:13, color:'#999' }}>Export your spreadsheet tab as CSV first</div>
+            <div style={{ fontSize:13, color:'#999' }}>Export as CSV first</div>
             <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} style={{ display:'none' }} />
           </div>
 
@@ -449,7 +481,7 @@ export default function Import() {
         <div style={{ padding:'20px 16px', textAlign:'center' }}>
           <div style={{ fontSize:52, marginBottom:16 }}>✅</div>
           <div style={{ fontSize:20, fontWeight:500, marginBottom:8 }}>{saved} rows imported</div>
-          <div style={{ fontSize:14, color:'#999', marginBottom:24, lineHeight:1.6 }}>Your Google Sheet has been updated. Check the relevant tab to confirm everything looks right.</div>
+          <div style={{ fontSize:14, color:'#999', marginBottom:24, lineHeight:1.6 }}>Check your Google Sheet to confirm everything looks right.</div>
           {errors.length>0 && (
             <div style={{ background:'#fceaea', borderRadius:10, padding:14, marginBottom:20, textAlign:'left' }}>
               <div style={{ fontSize:13, fontWeight:500, color:'#7a2020', marginBottom:8 }}>{errors.length} rows had errors:</div>
