@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react'
+    import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSales, getExpenses } from '../services/sheets.js'
 import { TopBar, SectionTitle, FAB } from './Nav.jsx'
 import SGSaleModal from './SGSaleModal.jsx'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const CHANNELS = ['Show','Website','Instagram','Facebook','Imports','Other']
+const CHANNELS = ['Show','Website','Instagram','Facebook','Exact plant','Other']
+const GOAL = parseFloat(localStorage.getItem('goal') || '4500')
 
 export default function PL() {
   const navigate = useNavigate()
@@ -121,3 +122,5 @@ export default function PL() {
     </div>
   )
 }
+
+    
