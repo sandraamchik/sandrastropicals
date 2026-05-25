@@ -35,7 +35,6 @@ export async function readSheet(tabName) {
     .filter(row => row.some(cell => cell !== ''))
     .map(row => Object.fromEntries(headerRow.map((h, i) => [h, row[i] ?? ''])))
 }
-}
 
 // ── WRITE (OAuth — auto-refreshes token) ─────────────────────────────────────
 export async function appendRow(tabName, rowData) {
