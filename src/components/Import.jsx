@@ -1,6 +1,6 @@
     import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addSale, addExpense, addInventory, getSales, getExpenses, getInventory } from '../services/sheets.js'
+import { addSale, addExpense, addInventory, getSales, getExpenses, getInventory, upsertCustomer } from '../services/sheets.js'
 
 const TEMPLATE_TYPES = [
   { key:'exactplants', label:'Exact Plants & Imports', icon:'🌱', color:'#378ADD', desc:'Plants sourced for customers or yourself — any vendor, any country' },
@@ -13,7 +13,7 @@ const REQUIRED_COLS = {
   exactplants: ['Buyer','Vendor','Plant name','Vendor price (CAD)'],
   consignment: ['Date received','Plant name','Qty received','Price per unit (CAD)'],
   expenses:    ['Date','Category','Amount (CAD)'],
-  shopify:     ['Name','Total'],
+  shopify:     ['Name','Email','Lineitem name','Lineitem price','Created at'],
 }
 
 function parseCSV(text) {
@@ -37,12 +37,12 @@ function getRowKey(type, row) {
   if (type === 'exactplants') return `${row['Date']||''}|${(row['Plant name']||row['Plant Name']||'').toLowerCase()}|${row['My price (CAD)']||''}`
   if (type === 'consignment') return `${row['Date received']||''}|${(row['Plant name']||row['Plant Name']||'').toLowerCase()}`
   if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
-  if (type === 'shopify')     return `${(row['Created at']||'').slice(0,10)}|${(row['Lineitem name']||row['Name']||'').toLowerCase()}|${row['Total']||''}`
+  if (type === 'shopify')     return `${(row['Created at']||'').slice(0,10)}|${(row['Lineitem name']||'').toLowerCase()}|${row['Lineitem price']||''}`
   return ''
 }
 
 function getExistingKey(type, row) {
-  if (type === 'exactplants' || type === 'shopify') return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
+  if (type === 'exactplants' || type === 'shopify') return `${row['Date']||row['Day']||(row['Created at']||'').slice(0,10)||''}|${(row['Plant Name']||row['Product title']||row['Lineitem name']||'').toLowerCase()}|${row['Sale Price (CAD)']||row['Total sales']||row['Lineitem price']||''}`
   if (type === 'consignment') return `${row['Date Added']||''}|${(row['Plant Name']||'').toLowerCase()}`
   if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
   return ''
@@ -83,22 +83,62 @@ function mapRow(type, row) {
     row['Shipment ID']||'',
     row['Notes']||'',
   ]}
-  if (type === 'shopify') return { type:'sale', data:[
-    (row['Created at']||'').slice(0,10),
-    row['Lineitem name']||row['Name']||'Shopify order',
-    '','',
-    row['Total']||row['Lineitem price']||'',
-    '','','','Website','',
-    '🛍 Shopify','No','',
-    row['Name']||'',
-  ]}
+  if (type === 'shopify') {
+    const product = row['Lineitem name'] || ''
+    const price   = parseFloat(row['Lineitem price'] || 0)
+    const qty     = parseInt(row['Lineitem quantity'] || 1)
+    const date    = (row['Created at'] || row['Paid at'] || '').slice(0, 10)
+    const order   = row['Name'] || ''
+    const email   = row['Email'] || ''
+    const vendor  = row['Vendor'] || ''
+    const payment = row['Payment Method'] || 'Shopify Payments'
+    const discount = parseFloat(row['Discount Amount'] || 0)
+    const shipping = parseFloat(row['Shipping'] || 0)
+
+    // Skip rows with no product
+    if (!product) return null
+    // Skip if price is 0 or negative
+    if (price <= 0) return null
+
+    const paymentTag = payment.toLowerCase().includes('paypal') ? '💳 PayPal'
+      : payment.toLowerCase().includes('shopify') ? '💳 Card'
+      : '💳 Card'
+
+    const notes = [
+      vendor ? `Vendor: ${vendor}` : '',
+      discount > 0 ? `Discount: CA$${discount}` : '',
+      shipping > 0 ? `Shipping charged: CA$${shipping}` : '',
+      email ? `Email: ${email}` : '',
+    ].filter(Boolean).join(' · ')
+
+    return { type: 'sale', data: [
+      date,
+      product,
+      'Plant', qty,
+      price,
+      '', '', '',
+      'Website', '',
+      paymentTag, 'No',
+      order,
+      notes,
+    ], customer: {
+      name:     row['Billing Name'] || row['Shipping Name'] || '',
+      email:    email,
+      city:     row['Billing City'] || row['Shipping City'] || '',
+      province: row['Billing Province Name'] || row['Shipping Province Name'] || '',
+      phone:    row['Billing Phone'] || row['Shipping Phone'] || '',
+      shipping: [row['Shipping Address1'], row['Shipping Address2'], row['Shipping City'], row['Shipping Province'], row['Shipping Zip']].filter(Boolean).join(', '),
+      date,
+      channel:  'Website',
+    }}
+  }
 }
 
 function getRowDisplay(type, row) {
-  const name   = row['Plant name']||row['Plant Name']||row['Lineitem name']||row['Description']||row['Name']||'—'
-  const amount = row['My price (CAD)']||row['Amount (CAD)']||row['Total']||row['Vendor price (CAD)']||''
-  const buyer  = row['Buyer']||''
-  const date   = row['Date received']||row['Date paid']||row['Date']||(row['Created at']||'').slice(0,10)||''
+  const name   = row['Lineitem name']||row['Plant name']||row['Plant Name']||row['Product title']||row['Description']||row['Name']||'—'
+  const amount = row['Lineitem price']||row['My price (CAD)']||row['Amount (CAD)']||row['Total sales']||row['Vendor price (CAD)']||''
+  const buyer  = row['Billing Name']||row['Shipping Name']||row['Buyer']||row['Customer name']||''
+  const date   = (row['Created at']||row['Paid at']||'').slice(0,10)||row['Date received']||row['Date paid']||row['Date']||row['Day']||''
   return { name, amount, buyer, date }
 }
 
@@ -192,6 +232,16 @@ export default function Import() {
         if (mapped.type === 'sale')           await addSale(mapped.data)
         else if (mapped.type === 'expense')   await addExpense(mapped.data)
         else if (mapped.type === 'inventory') await addInventory(mapped.data)
+
+        // Auto-save customer for Shopify imports
+        if (type === 'shopify' && mapped.customer?.name) {
+          try {
+            await upsertCustomer(mapped.customer)
+          } catch(e) {
+            // Don't block import if customer save fails
+          }
+        }
+
         count++
         setSaved(count)
       } catch(err) {
