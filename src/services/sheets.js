@@ -7,20 +7,34 @@ const BASE     = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 // ── READ (API key — no auth needed) ──────────────────────────────────────────
 export async function readSheet(tabName) {
-  const url  = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z1000?key=${API_KEY}`
+  const url  = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z2000?key=${API_KEY}`
   const res  = await fetch(url)
   if (!res.ok) throw new Error(`Failed to read ${tabName}: ${res.statusText}`)
   const data = await res.json()
-  const [headers, ...rows] = data.values || []
-  if (!headers) return []
-  // Skip merged title row if it exists (only one cell populated)
-  const realHeaders = headers.filter(Boolean).length > 1 ? headers : null
-  if (!realHeaders) {
-    const [, hdrs, ...dataRows] = data.values || []
-    if (!hdrs) return []
-    return dataRows.map(row => Object.fromEntries(hdrs.map((h,i) => [h, row[i] ?? ''])))
+  const rows = data.values || []
+  if (!rows.length) return []
+
+  // Detect if first row is a merged title (only one non-empty cell)
+  // If so, skip it and use row 2 as headers
+  const firstRow = rows[0]
+  const firstRowPopulated = firstRow.filter(Boolean).length
+  
+  let headerRow, dataRows
+  if (firstRowPopulated <= 1 && rows.length > 1) {
+    // First row is a title — use row 2 as headers, data from row 4 (skip instruction row 3)
+    headerRow = rows[1]
+    dataRows  = rows.slice(3) // skip title, headers, instruction row
+  } else {
+    // No title row — row 1 is headers
+    headerRow = rows[0]
+    dataRows  = rows.slice(1)
   }
-  return rows.map(row => Object.fromEntries(realHeaders.map((h,i) => [h, row[i] ?? ''])))
+
+  if (!headerRow) return []
+  return dataRows
+    .filter(row => row.some(cell => cell !== ''))
+    .map(row => Object.fromEntries(headerRow.map((h, i) => [h, row[i] ?? ''])))
+}
 }
 
 // ── WRITE (OAuth — auto-refreshes token) ─────────────────────────────────────
@@ -33,7 +47,8 @@ export async function appendRow(tabName, rowData) {
   }
   if (!token) throw new Error('Not signed in — please sign in to save data')
 
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}:append?valueInputOption=USER_ENTERED`
+  // Append after last row with data — A4 onwards to skip title/headers/instructions
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A4:Z2000:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -42,7 +57,6 @@ export async function appendRow(tabName, rowData) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    // Token expired — tell user to sign in again
     if (res.status === 401) throw new Error('Session expired — please sign out and sign back in')
     throw new Error(err.error?.message || `Failed to write to ${tabName}`)
   }
