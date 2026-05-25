@@ -5,42 +5,43 @@ const API_KEY  = import.meta.env.VITE_SHEETS_API_KEY
 const SHEET_ID = import.meta.env.VITE_SHEET_ID
 const BASE     = 'https://sheets.googleapis.com/v4/spreadsheets'
 
+// Tab structure: which row has headers, which row data starts
+// row numbers are 1-indexed
+const TAB_CONFIG = {
+  'Sales':       { headerRow: 2, dataRow: 4 },  // row1=title, row2=headers, row3=instructions
+  'Expenses':    { headerRow: 2, dataRow: 3 },  // row1=title, row2=headers
+  'Inventory':   { headerRow: 2, dataRow: 4 },
+  'Purchases':   { headerRow: 2, dataRow: 4 },
+  'Shipments':   { headerRow: 2, dataRow: 4 },
+  'Suppliers':   { headerRow: 2, dataRow: 4 },
+  'Pipeline':    { headerRow: 2, dataRow: 4 },
+  'Customers':   { headerRow: 2, dataRow: 3 },
+  'P&L Summary': { headerRow: 3, dataRow: 4 },  // row1=title, row2=note, row3=headers
+  'Starkle G':   { headerRow: 20, dataRow: 22 }, // sales section headers
+}
+
 // ── READ (API key — no auth needed) ──────────────────────────────────────────
 export async function readSheet(tabName) {
-  const url  = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z2000?key=${API_KEY}`
-  const res  = await fetch(url)
+  const config = TAB_CONFIG[tabName] || { headerRow: 1, dataRow: 2 }
+  const url    = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z2000?key=${API_KEY}`
+  const res    = await fetch(url)
   if (!res.ok) throw new Error(`Failed to read ${tabName}: ${res.statusText}`)
-  const data = await res.json()
-  const rows = data.values || []
+  const data   = await res.json()
+  const rows   = data.values || []
   if (!rows.length) return []
 
-  // Detect title row — first row where only col A has content (it's a merged title)
-  // Check first 10 columns only to avoid wide Customers tab fooling detection
-  const firstRow = rows[0].slice(0, 10)
-  const firstRowPopulated = firstRow.filter(Boolean).length
-
-  let headerRow, dataRows
-  if (firstRowPopulated <= 1 && rows.length > 1) {
-    // First row is a title — use row 2 as headers
-    // Check if row 3 is an instruction row (contains words like YYYY-MM-DD or Auto)
-    const row3 = rows[2] || []
-    const isInstruction = row3.some(c => typeof c === 'string' && (c.includes('YYYY') || c === 'Auto' || c.includes('e.g.')))
-    headerRow = rows[1]
-    dataRows  = isInstruction ? rows.slice(3) : rows.slice(2)
-  } else {
-    headerRow = rows[0]
-    dataRows  = rows.slice(1)
-  }
+  const headerRow = rows[config.headerRow - 1]
+  const dataRows  = rows.slice(config.dataRow - 1)
 
   if (!headerRow) return []
-  // Only use first N headers (non-empty) to avoid wide empty columns
-  const validHeaders = headerRow.map((h, i) => ({ h, i })).filter(x => x.h)
-  const lastValidCol = validHeaders.length ? validHeaders[validHeaders.length - 1].i : headerRow.length
+
+  const validHeaders = headerRow.map((h,i) => ({h,i})).filter(x => x.h)
+  const lastCol      = validHeaders.length ? validHeaders[validHeaders.length-1].i : headerRow.length
 
   return dataRows
-    .filter(row => row.slice(0, lastValidCol + 1).some(cell => cell !== '' && cell != null))
+    .filter(row => row.slice(0, lastCol+1).some(cell => cell !== '' && cell != null))
     .map(row => Object.fromEntries(
-      headerRow.slice(0, lastValidCol + 1).map((h, i) => [h || `col${i}`, row[i] ?? ''])
+      headerRow.slice(0, lastCol+1).map((h,i) => [h||`col${i}`, row[i] ?? ''])
     ))
 }
 
@@ -54,10 +55,11 @@ export async function appendRow(tabName, rowData) {
   }
   if (!token) throw new Error('Not signed in — please sign in to save data')
 
-  // Google Sheets append API requires range like 'Tab Name'!A1
-  const safeTab = tabName.startsWith("'") ? tabName : `'${tabName}'`
-  const range   = encodeURIComponent(`${safeTab}!A1`)
-  const url     = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
+  // Build range — encode only the tab name, keep single quotes raw for Google Sheets API
+  const encodedTab = tabName.includes(' ') 
+    ? `'${tabName.replace(/'/g, "''")}'!A1`
+    : `${tabName}!A1`
+  const url = `${BASE}/${SHEET_ID}/values/${encodedTab.replace(/ /g, '%20')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
