@@ -175,9 +175,10 @@ export default function Home({ onSignOut }) {
     if (!d.name || !d.amount) return
     setSaving(true)
     try {
-      const notes = [d.notes, saleCustomer?`Customer: ${saleCustomer}`:'', saleCustomerNote].filter(Boolean).join(' · ')
+      // Sales: Date|Plant Name|Customer|Vendor|Qty|Sale Price|Cost|Margin$|Margin%|Channel|Show Name|Payment|Cash|Shipment ID|Notes
+      const notes = [d.notes, saleCustomerNote].filter(Boolean).join(' · ')
       await addSale([
-        d.date, d.name, '', 1, parseFloat(d.amount),
+        d.date, d.name, saleCustomer, '', 1, parseFloat(d.amount),
         '', '', '', saleChannel, '',
         salePayment, salePayment==='💵 Cash'?'Yes':'No', '', notes
       ])
@@ -264,6 +265,7 @@ export default function Home({ onSignOut }) {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, padding:'0 16px', marginBottom:20 }}>
         {[
           { label:'Log a sale',  icon:'💸', action:() => setModal('sale')       },
+          { label:'📷 Photo log', icon:'📷', action:() => navigate('/photolog')  },
           { label:'Log expense', icon:'🧾', action:() => setModal('expense')    },
           { label:'Import data', icon:'📥', action:() => navigate('/import')    },
           { label:'Suppliers',   icon:'🌏', action:() => navigate('/suppliers') },
