@@ -167,7 +167,7 @@ export default function Inventory() {
 
   function inp(val, onChange, placeholder='', type='text') {
     return (
-      <input type={type} value={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      <input type={type} defaultValue={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
         style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box' }} />
     )
   }
