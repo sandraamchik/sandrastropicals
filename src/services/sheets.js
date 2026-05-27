@@ -6,18 +6,17 @@ const SHEET_ID = import.meta.env.VITE_SHEET_ID
 const BASE     = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 // Tab structure: which row has headers, which row data starts
-// row numbers are 1-indexed
 const TAB_CONFIG = {
   'Sales':       { headerRow: 2, dataRow: 4 },  // row1=title, row2=headers, row3=instructions
-  'Expenses':    { headerRow: 2, dataRow: 3 },  // row1=title, row2=headers
-  'Inventory':   { headerRow: 2, dataRow: 4 },
-  'Purchases':   { headerRow: 2, dataRow: 4 },
-  'Shipments':   { headerRow: 2, dataRow: 4 },
-  'Suppliers':   { headerRow: 2, dataRow: 4 },
-  'Pipeline':    { headerRow: 2, dataRow: 4 },
+  'Expenses':    { headerRow: 2, dataRow: 3 },  // row1=title, row2=headers, data from row3
+  'Inventory':   { headerRow: 2, dataRow: 3 },  // row1=title, row2=headers, data from row3
+  'Purchases':   { headerRow: 2, dataRow: 3 },
+  'Shipments':   { headerRow: 2, dataRow: 3 },
+  'Suppliers':   { headerRow: 2, dataRow: 3 },
+  'Pipeline':    { headerRow: 2, dataRow: 3 },
   'Customers':   { headerRow: 2, dataRow: 3 },
   'P&L Summary': { headerRow: 3, dataRow: 4 },  // row1=title, row2=note, row3=headers
-  'Starkle G':   { headerRow: 20, dataRow: 22 }, // sales section headers
+  'Starkle G':   { headerRow: 20, dataRow: 22 },
 }
 
 // ── READ (API key — no auth needed) ──────────────────────────────────────────
