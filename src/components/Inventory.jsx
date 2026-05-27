@@ -1,291 +1,404 @@
-    import React, { useState, useEffect } from 'react'
+    import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getInventory, addInventory } from '../services/sheets.js'
 
 const STAGES = ['On order','Received','Acclimating','Ready','Propagating','Babies ready','Sold','Dead']
 const STAGE_COLORS = {
-  'On order':    '#378ADD',
-  'Received':    '#c8824a',
-  'Acclimating': '#BA7517',
-  'Ready':       '#1D9E75',
-  'Propagating': '#534AB7',
-  'Babies ready':'#0F6E56',
-  'Sold':        '#999',
-  'Dead':        '#ccc',
+  'On order':     '#378ADD',
+  'Received':     '#c8824a',
+  'Acclimating':  '#BA7517',
+  'Ready':        '#1D9E75',
+  'Propagating':  '#534AB7',
+  'Babies ready': '#0F6E56',
+  'Sold':         '#999',
+  'Dead':         '#ccc',
 }
-
-const TYPES = ['Alocasia','Philodendron','Monstera','Hoya','Anthurium','Other']
+const SOURCES = ['Okanoka','Dr Hoya','Mira','Portimol','PkraiLuck','Kunyanee','Prapai','Emily','NuNim Nursery','Propagated','Local','Other']
+const TYPES   = ['Alocasia','Philodendron','Monstera','Hoya','Anthurium','Scindapsus','Rhaphidophora','Other']
 
 export default function Inventory() {
-  const navigate = useNavigate()
+  const navigate     = useNavigate()
   const [searchParams] = useSearchParams()
-  const [plants, setPlants]     = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [view, setView]         = useState('pipeline') // pipeline | list
-  const [tab, setTab]           = useState('active')   // active | add
-  const [search, setSearch]     = useState('')
+  const [plants, setPlants]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [modal, setModal]         = useState(null) // null | 'add' | 'propagate' | 'update'
+  const [search, setSearch]       = useState('')
   const [filterStage, setFilterStage] = useState('all')
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected]   = useState(null)
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(false)
+  const [error, setError]         = useState('')
+
+  // Add form state
   const [form, setForm] = useState({
-    name:'', type:'Alocasia', qty:1, date: new Date().toISOString().slice(0,10),
-    cost:'', currency:'IDR', source:'Okanoka', mother:'No', sellPrice:'', notes:'', status:'Received'
+    name: '', type: 'Alocasia', qty: 1,
+    dateAdded: new Date().toISOString().slice(0,10),
+    cost: '', sellPrice: '', source: 'Okanoka',
+    motherPlant: 'No', status: 'Received', notes: '',
   })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved]   = useState(false)
+
+  // Propagate form state
+  const [propForm, setPropForm] = useState({
+    motherName: '', cuttings: 1, dateAdded: new Date().toISOString().slice(0,10),
+  })
 
   useEffect(() => {
-    const action = searchParams.get('action')
-    if (action === 'add' || action === 'buy') setTab('add')
-    getInventory().then(data => { setPlants(data); setLoading(false) }).catch(() => setLoading(false))
+    if (searchParams.get('action') === 'add') setModal('add')
+    loadPlants()
   }, [])
 
-  const active = plants.filter(p => p.Status !== 'Sold' && p.Status !== 'Dead')
-  const filtered = active.filter(p => {
-    const qMatch = p['Plant Name']?.toLowerCase().includes(search.toLowerCase()) || p.Type?.toLowerCase().includes(search.toLowerCase())
-    const sMatch = filterStage === 'all' || p.Status === filterStage
-    return qMatch && sMatch
-  })
+  async function loadPlants() {
+    setLoading(true)
+    try {
+      const data = await getInventory()
+      setPlants(data)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
 
-  const stageCounts = STAGES.slice(0,-2).reduce((acc, s) => {
+  async function handleAddPlant(e) {
+    e.preventDefault()
+    if (!form.name) return
+    setSaving(true); setError('')
+    try {
+      await addInventory([
+        form.name,
+        form.type,
+        form.qty,
+        form.dateAdded,
+        form.cost || '',
+        form.sellPrice || '',
+        '', // margin % — formula
+        form.source,
+        '', // shipment ID
+        form.motherPlant,
+        '', // mother plant ID
+        form.status,
+        form.dateAdded, // stage date = date added
+        '', // days in stage — formula
+        '', // days held — formula
+        'No',
+        form.notes,
+      ])
+      setSaved(true)
+      setTimeout(() => {
+        setSaved(false)
+        setModal(null)
+        setForm({ name:'', type:'Alocasia', qty:1, dateAdded:new Date().toISOString().slice(0,10), cost:'', sellPrice:'', source:'Okanoka', motherPlant:'No', status:'Received', notes:'' })
+        loadPlants()
+      }, 1000)
+    } catch(err) {
+      setError(err.message)
+    } finally { setSaving(false) }
+  }
+
+  async function handlePropagate(e) {
+    e.preventDefault()
+    if (!propForm.motherName || !propForm.cuttings) return
+    setSaving(true); setError('')
+    try {
+      // Find mother plant to get cost
+      const mother = plants.find(p => p['Plant Name']?.toLowerCase().includes(propForm.motherName.toLowerCase()))
+      const motherCost  = mother ? parseFloat(mother['Cost (CAD)'] || 0) : 0
+      const costPerBaby = motherCost > 0 ? (motherCost / propForm.cuttings).toFixed(2) : ''
+
+      for (let i = 0; i < propForm.cuttings; i++) {
+        await addInventory([
+          `${propForm.motherName} — cutting`,
+          mother?.Type || '',
+          1,
+          propForm.dateAdded,
+          costPerBaby,
+          '', '', // sell price, margin
+          mother?.Source || 'Propagated',
+          '',
+          'No',
+          '',
+          'Acclimating',
+          propForm.dateAdded,
+          '', '', 'No',
+          `Propagated from ${propForm.motherName}`,
+        ])
+        if (i < propForm.cuttings - 1) await new Promise(r => setTimeout(r, 1100))
+      }
+      setSaved(true)
+      setTimeout(() => {
+        setSaved(false); setModal(null)
+        setPropForm({ motherName:'', cuttings:1, dateAdded:new Date().toISOString().slice(0,10) })
+        loadPlants()
+      }, 1000)
+    } catch(err) {
+      setError(err.message)
+    } finally { setSaving(false) }
+  }
+
+  const active   = plants.filter(p => p.Status !== 'Sold' && p.Status !== 'Dead' && p['Plant Name'])
+  const filtered = active.filter(p => {
+    const q = p['Plant Name']?.toLowerCase().includes(search.toLowerCase())
+    const s = filterStage === 'all' || p.Status === filterStage
+    return q && s
+  })
+  const stageCounts = STAGES.slice(0,-2).reduce((acc,s) => {
     acc[s] = active.filter(p => p.Status === s).length
     return acc
   }, {})
-
   const totalCost = active.reduce((s,p) => s + parseFloat(p['Cost (CAD)']||0), 0)
   const totalVal  = active.reduce((s,p) => s + parseFloat(p['Sell Price (CAD)']||0), 0)
 
-  async function handleSave(e) {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await addInventory([
-        form.name, form.type, form.qty, form.date,
-        parseFloat(form.cost)||'', parseFloat(form.sellPrice)||'',
-        '', form.source, form.mother, form.status, '', form.notes
-      ])
-      setSaved(true)
-      const data = await getInventory()
-      setPlants(data)
-      setForm(f => ({ ...f, name:'', cost:'', sellPrice:'', notes:'', qty:1 }))
-      setTimeout(() => { setSaved(false); setTab('active') }, 1200)
-    } catch {
-      alert('Failed to save. Check your Google Sheets connection in Settings.')
-    } finally {
-      setSaving(false)
-    }
+  function setF(k,v) { setForm(f => ({...f, [k]:v})) }
+  function setPF(k,v) { setPropForm(f => ({...f, [k]:v})) }
+
+  function Pill({ label, active, onClick, color }) {
+    return (
+      <button type="button" onClick={onClick} style={{ padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap', border:`0.5px solid ${active?(color||'#1a1a1a'):'#e5e5e5'}`, background:active?(color||'#1a1a1a'):'#fff', color:active?'#fff':(color||'#666'), minHeight:34 }}>
+        {label}
+      </button>
+    )
   }
 
-  function PlantCard({ p }) {
-    const age = p['Date Added'] ? Math.floor((new Date() - new Date(p['Date Added']))/86400000) : null
-    const isOld = age > 120 && p['Mother Plant'] !== 'Yes'
-    const margin = p['Cost (CAD)'] && p['Sell Price (CAD)']
-      ? Math.round(((p['Sell Price (CAD)'] - p['Cost (CAD)']) / p['Sell Price (CAD)']) * 100) : null
-
+  function FieldInput({ label, children }) {
     return (
-      <div onClick={() => setSelected(selected?.['Plant Name'] === p['Plant Name'] ? null : p)}
-        style={{ background:'#fff', border:`0.5px solid ${isOld ? '#EF9F27' : '#e5e5e5'}`,
-          borderLeft:`3px solid ${STAGE_COLORS[p.Status]||'#e5e5e5'}`,
-          borderRadius:'0 10px 10px 0', padding:'12px 13px', cursor:'pointer', marginBottom:8 }}>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:14, fontWeight:500 }}>{p['Plant Name']}</div>
-            <div style={{ display:'flex', gap:6, marginTop:5, flexWrap:'wrap' }}>
-              <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f5f5f5', color:'#666' }}>{p.Type}</span>
-              <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background: STAGE_COLORS[p.Status]+'22', color: STAGE_COLORS[p.Status] }}>{p.Status}</span>
-              {p['Mother Plant'] === 'Yes' && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#EEEDFE', color:'#534AB7' }}>Mother</span>}
-              {p.Qty > 1 && <span style={{ fontSize:11, color:'#999' }}>×{p.Qty}</span>}
-              {age !== null && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background: isOld?'#FAEEDA':'#f5f5f5', color: isOld?'#854F0B':'#999' }}>{age}d</span>}
-            </div>
-          </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:14, fontWeight:500 }}>{p['Cost (CAD)'] ? `CA$${parseFloat(p['Cost (CAD)']).toFixed(2)}` : <span style={{ color:'#EF9F27', fontSize:12 }}>no cost ⚑</span>}</div>
-            {margin !== null && <div style={{ fontSize:11, color:'#1D9E75', marginTop:2 }}>{margin}% margin</div>}
-          </div>
-        </div>
-
-        {selected?.['Plant Name'] === p['Plant Name'] && (
-          <div style={{ marginTop:10, paddingTop:10, borderTop:'0.5px solid #f0f0f0' }}>
-            {p.Source && <div style={{ fontSize:12, color:'#999', marginBottom:4 }}>Source: <span style={{ color:'#1a1a1a', fontWeight:500 }}>{p.Source}</span></div>}
-            {p.Notes && <div style={{ fontSize:12, color:'#999', marginBottom:8, fontStyle:'italic' }}>{p.Notes}</div>}
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              {['Mark ready','Log propagation','Log sale','Mark as dead'].map(action => (
-                <button key={action} onClick={e => { e.stopPropagation(); alert(`"${action}" coming soon — will update ${p['Plant Name']} in your sheet`) }}
-                  style={{ padding:'6px 11px', borderRadius:8, border:'0.5px solid #e5e5e5', background: action==='Mark as dead'?'#fff':'#f5f5f5', fontSize:12, color: action==='Mark as dead'?'#A32D2D':'#1a1a1a', cursor:'pointer' }}>
-                  {action}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      <div style={{ marginBottom:16 }}>
+        <label style={{ fontSize:12, color:'#999', marginBottom:7, display:'block' }}>{label}</label>
+        {children}
       </div>
     )
   }
 
+  function inp(val, onChange, placeholder='', type='text') {
+    return (
+      <input type={type} value={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box' }} />
+    )
+  }
+
   return (
-    <div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 12px', borderBottom:'0.5px solid #e5e5e5' }}>
+    <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', paddingBottom:100 }}>
+
+      {/* TOP BAR */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 12px', borderBottom:'0.5px solid #e5e5e5', position:'sticky', top:0, background:'#fff', zIndex:50 }}>
         <div>
           <div style={{ fontSize:18, fontWeight:500 }}>Inventory</div>
-          <div style={{ fontSize:12, color:'#999', marginTop:2 }}>{active.length} plants · {active.reduce((s,p)=>s+parseInt(p.Qty||1),0)} units</div>
+          <div style={{ fontSize:12, color:'#999', marginTop:2 }}>{active.length} plants</div>
         </div>
-        <button onClick={() => setTab(tab==='add'?'active':'add')} style={{
-          padding:'7px 14px', borderRadius:20, fontSize:13, fontWeight:500, cursor:'pointer',
-          background: tab==='add'?'#1a1a1a':'#f5f5f5', color: tab==='add'?'#fff':'#666', border:'none'
-        }}>{tab==='add'?'✕ Cancel':'+ Add'}</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={() => { setModal('propagate'); setError('') }} style={{ padding:'7px 12px', borderRadius:20, fontSize:13, fontWeight:500, background:'#534AB7', color:'#fff', border:'none', cursor:'pointer' }}>✂️ Propagate</button>
+          <button onClick={() => { setModal('add'); setError('') }} style={{ padding:'7px 12px', borderRadius:20, fontSize:13, fontWeight:500, background:'#1D9E75', color:'#fff', border:'none', cursor:'pointer' }}>+ Add</button>
+        </div>
       </div>
 
-      {tab === 'active' && (
-        <>
-          {/* Summary */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, padding:14 }}>
-            <div style={{ background:'#f5f5f5', borderRadius:8, padding:12 }}>
-              <div style={{ fontSize:10, color:'#999', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:3 }}>Total cost</div>
-              <div style={{ fontSize:20, fontWeight:500 }}>CA${Math.round(totalCost).toLocaleString()}</div>
-            </div>
-            <div style={{ background:'#f5f5f5', borderRadius:8, padding:12 }}>
-              <div style={{ fontSize:10, color:'#999', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:3 }}>Est. value</div>
-              <div style={{ fontSize:20, fontWeight:500, color:'#1D9E75' }}>CA${Math.round(totalVal).toLocaleString()}</div>
-            </div>
-          </div>
+      {/* SUMMARY */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, padding:14 }}>
+        <div style={{ background:'#f5f5f5', borderRadius:8, padding:12 }}>
+          <div style={{ fontSize:10, color:'#999', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:3 }}>Total cost</div>
+          <div style={{ fontSize:20, fontWeight:500 }}>CA${Math.round(totalCost).toLocaleString()}</div>
+        </div>
+        <div style={{ background:'#f5f5f5', borderRadius:8, padding:12 }}>
+          <div style={{ fontSize:10, color:'#999', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:3 }}>Est. value</div>
+          <div style={{ fontSize:20, fontWeight:500, color:'#1D9E75' }}>CA${Math.round(totalVal).toLocaleString()}</div>
+        </div>
+      </div>
 
-          {/* Pipeline counts */}
-          <div style={{ padding:'0 16px', marginBottom:14, overflowX:'auto', scrollbarWidth:'none' }}>
-            <div style={{ display:'flex', gap:6 }}>
-              <button onClick={() => setFilterStage('all')} style={{
-                padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap',
-                border:'0.5px solid #e5e5e5', background: filterStage==='all'?'#1a1a1a':'#fff', color: filterStage==='all'?'#fff':'#666'
-              }}>All ({active.length})</button>
-              {Object.entries(stageCounts).filter(([,n])=>n>0).map(([s,n]) => (
-                <button key={s} onClick={() => setFilterStage(s)} style={{
-                  padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap',
-                  border:`0.5px solid ${STAGE_COLORS[s]}44`,
-                  background: filterStage===s ? STAGE_COLORS[s] : '#fff',
-                  color: filterStage===s ? '#fff' : STAGE_COLORS[s]
-                }}>{s} ({n})</button>
-              ))}
+      {/* STAGE FILTERS */}
+      <div style={{ display:'flex', gap:6, padding:'0 16px', overflowX:'auto', scrollbarWidth:'none', marginBottom:12 }}>
+        <Pill label={`All (${active.length})`} active={filterStage==='all'} onClick={() => setFilterStage('all')} />
+        {Object.entries(stageCounts).filter(([,n])=>n>0).map(([s,n]) => (
+          <Pill key={s} label={`${s} (${n})`} active={filterStage===s} onClick={() => setFilterStage(s)} color={STAGE_COLORS[s]} />
+        ))}
+      </div>
+
+      {/* SEARCH */}
+      <div style={{ padding:'0 16px', marginBottom:12 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search plants…"
+          style={{ width:'100%', padding:'9px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit', color:'#1a1a1a', background:'#f5f5f5', outline:'none', boxSizing:'border-box' }} />
+      </div>
+
+      {/* PLANT LIST */}
+      <div style={{ padding:'0 16px', display:'flex', flexDirection:'column', gap:8 }}>
+        {loading ? <div style={{ fontSize:14, color:'#999', padding:'12px 0' }}>Loading…</div>
+        : filtered.length===0 ? <div style={{ fontSize:14, color:'#999', padding:'12px 0' }}>No plants found</div>
+        : filtered.map((p,i) => {
+          const age    = p['Date Added'] ? Math.floor((new Date()-new Date(p['Date Added']))/86400000) : null
+          const isOld  = age > 120 && p['Mother Plant'] !== 'Yes'
+          const margin = p['Cost (CAD)'] && p['Sell Price (CAD)'] ? Math.round(((p['Sell Price (CAD)']-p['Cost (CAD)'])/p['Sell Price (CAD)'])*100) : null
+          const isOpen = selected === i
+
+          return (
+            <div key={i} onClick={() => setSelected(isOpen ? null : i)}
+              style={{ background:'#fff', border:`0.5px solid ${isOld?'#EF9F27':'#e5e5e5'}`, borderLeft:`3px solid ${STAGE_COLORS[p.Status]||'#e5e5e5'}`, borderRadius:'0 10px 10px 0', padding:'12px 13px', cursor:'pointer' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:500 }}>{p['Plant Name']}</div>
+                  <div style={{ display:'flex', gap:6, marginTop:5, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:STAGE_COLORS[p.Status]+'22', color:STAGE_COLORS[p.Status] }}>{p.Status}</span>
+                    {p.Source && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f5f5f5', color:'#666' }}>{p.Source}</span>}
+                    {p['Mother Plant']==='Yes' && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#EEEDFE', color:'#534AB7' }}>Mother</span>}
+                    {p.Qty > 1 && <span style={{ fontSize:11, color:'#999' }}>×{p.Qty}</span>}
+                    {age !== null && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:isOld?'#FAEEDA':'#f5f5f5', color:isOld?'#854F0B':'#999' }}>{age}d</span>}
+                  </div>
+                </div>
+                <div style={{ textAlign:'right', flexShrink:0 }}>
+                  <div style={{ fontSize:13, fontWeight:500 }}>{p['Cost (CAD)'] ? `CA$${parseFloat(p['Cost (CAD)']).toFixed(2)}` : <span style={{ color:'#EF9F27', fontSize:12 }}>no cost</span>}</div>
+                  {margin !== null && <div style={{ fontSize:11, color:'#1D9E75', marginTop:2 }}>{margin}% margin</div>}
+                </div>
+              </div>
+
+              {isOpen && (
+                <div style={{ marginTop:10, paddingTop:10, borderTop:'0.5px solid #f0f0f0' }}>
+                  {p.Notes && <div style={{ fontSize:12, color:'#666', marginBottom:8, fontStyle:'italic' }}>{p.Notes}</div>}
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {['Mark received','Mark acclimating','Mark ready','Mark propagating','Mark sold','Mark as dead'].map(action => (
+                      <button key={action} type="button"
+                        onClick={e => { e.stopPropagation(); alert(`"${action}" — stage update coming soon`) }}
+                        style={{ padding:'6px 11px', borderRadius:8, border:'0.5px solid #e5e5e5', background:action==='Mark as dead'?'#fff':'#f5f5f5', fontSize:12, color:action==='Mark as dead'?'#A32D2D':'#1a1a1a', cursor:'pointer' }}>
+                        {action}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )
+        })}
+      </div>
 
-          {/* Search */}
-          <div style={{ padding:'0 16px', marginBottom:12 }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search plants…"
-              style={{ width:'100%', padding:'9px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit', color:'#1a1a1a', background:'#f5f5f5', outline:'none' }} />
-          </div>
+      {/* ADD PLANT MODAL */}
+      {modal === 'add' && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+          onClick={e => e.target===e.currentTarget && setModal(null)}>
+          <div style={{ background:'#fff', borderRadius:'18px 18px 0 0', width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto', paddingBottom:32 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 12px', borderBottom:'0.5px solid #e5e5e5', position:'sticky', top:0, background:'#fff' }}>
+              <div style={{ fontSize:17, fontWeight:500 }}>Add to inventory</div>
+              <button onClick={() => setModal(null)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#999' }}>✕</button>
+            </div>
+            <form onSubmit={handleAddPlant} style={{ padding:'16px' }}>
+              <FieldInput label="Plant name *">
+                {inp(form.name, v=>setF('name',v), 'e.g. Alocasia Dragon Scale')}
+              </FieldInput>
 
-          {/* Plant list */}
-          <div style={{ padding:'0 16px' }}>
-            {loading ? <div style={{ fontSize:14, color:'#999' }}>Loading…</div>
-            : filtered.length === 0 ? <div style={{ fontSize:14, color:'#999' }}>No plants found</div>
-            : filtered.map((p,i) => <PlantCard key={i} p={p} />)}
+              <FieldInput label="Type">
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {TYPES.map(t => <Pill key={t} label={t} active={form.type===t} onClick={()=>setF('type',t)} />)}
+                </div>
+              </FieldInput>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
+                <FieldInput label="Quantity">
+                  {inp(form.qty, v=>setF('qty',v), '1', 'number')}
+                </FieldInput>
+                <FieldInput label="Date added">
+                  {inp(form.dateAdded, v=>setF('dateAdded',v), '', 'date')}
+                </FieldInput>
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
+                <FieldInput label="Cost paid (CAD)">
+                  {inp(form.cost, v=>setF('cost',v), '0.00', 'number')}
+                </FieldInput>
+                <FieldInput label="Sell price (CAD)">
+                  {inp(form.sellPrice, v=>setF('sellPrice',v), '0.00', 'number')}
+                </FieldInput>
+              </div>
+
+              <FieldInput label="Source">
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {SOURCES.map(s => <Pill key={s} label={s} active={form.source===s} onClick={()=>setF('source',s)} />)}
+                </div>
+              </FieldInput>
+
+              <FieldInput label="Status">
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {STAGES.slice(0,-2).map(s => <Pill key={s} label={s} active={form.status===s} onClick={()=>setF('status',s)} color={STAGE_COLORS[s]} />)}
+                </div>
+              </FieldInput>
+
+              <FieldInput label="Mother plant?">
+                <div style={{ display:'flex', gap:8 }}>
+                  {['Yes','No'].map(v => <Pill key={v} label={v} active={form.motherPlant===v} onClick={()=>setF('motherPlant',v)} />)}
+                </div>
+              </FieldInput>
+
+              <FieldInput label="Notes (optional)">
+                {inp(form.notes, v=>setF('notes',v), 'Any extra info')}
+              </FieldInput>
+
+              {error && <div style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:12 }}>{error}</div>}
+
+              <button type="submit" disabled={saving} style={{ width:'100%', padding:15, background:saved?'#0F6E56':saving?'#ccc':'#1D9E75', color:'#fff', border:'none', borderRadius:12, fontSize:16, fontWeight:500, cursor:saving?'default':'pointer', minHeight:52 }}>
+                {saved ? '✓ Saved!' : saving ? 'Saving…' : 'Add to inventory'}
+              </button>
+            </form>
           </div>
-        </>
+        </div>
       )}
 
-      {tab === 'add' && (
-        <form onSubmit={handleSave} style={{ padding:'20px 16px' }}>
-          {[
-            { label:'Plant name *', key:'name', type:'text', placeholder:'e.g. Alocasia Dragon Scale' },
-          ].map(f => (
-            <div key={f.key} style={{ marginBottom:16 }}>
-              <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>{f.label}</label>
-              <input type={f.type} value={form[f.key]} onChange={e=>setForm(fm=>({...fm,[f.key]:e.target.value}))} placeholder={f.placeholder} required={f.key==='name'}
-                style={{ width:'100%', padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit', color:'#1a1a1a', background:'#fff' }} />
+      {/* PROPAGATE MODAL */}
+      {modal === 'propagate' && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+          onClick={e => e.target===e.currentTarget && setModal(null)}>
+          <div style={{ background:'#fff', borderRadius:'18px 18px 0 0', width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto', paddingBottom:32 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 12px', borderBottom:'0.5px solid #e5e5e5', position:'sticky', top:0, background:'#fff' }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:500 }}>✂️ Log propagation</div>
+                <div style={{ fontSize:12, color:'#999', marginTop:2 }}>Creates baby plant entries from a mother</div>
+              </div>
+              <button onClick={() => setModal(null)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#999' }}>✕</button>
             </div>
-          ))}
+            <form onSubmit={handlePropagate} style={{ padding:'16px' }}>
 
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:8, display:'block' }}>Type</label>
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              {TYPES.map(t => (
-                <button key={t} type="button" onClick={() => setForm(f=>({...f,type:t}))} style={{
-                  padding:'6px 12px', borderRadius:20, fontSize:13, cursor:'pointer', border:'0.5px solid #e5e5e5',
-                  background: form.type===t?'#1a1a1a':'#fff', color: form.type===t?'#fff':'#666'
-                }}>{t}</button>
-              ))}
-            </div>
+              <FieldInput label="Mother plant name *">
+                <div style={{ position:'relative' }}>
+                  {inp(propForm.motherName, v=>setPF('motherName',v), 'Type to search your inventory')}
+                  {propForm.motherName.length > 1 && (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:9, boxShadow:'0 4px 12px rgba(0,0,0,0.1)', zIndex:100, maxHeight:160, overflowY:'auto' }}>
+                      {active.filter(p => p['Plant Name']?.toLowerCase().includes(propForm.motherName.toLowerCase())).slice(0,6).map((p,i) => (
+                        <div key={i} onMouseDown={() => setPF('motherName', p['Plant Name'])}
+                          style={{ padding:'10px 13px', fontSize:14, cursor:'pointer', borderBottom:'0.5px solid #f5f5f5' }}
+                          onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
+                          onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                          {p['Plant Name']}
+                          {p['Cost (CAD)'] && <span style={{ fontSize:12, color:'#999', marginLeft:8 }}>CA${p['Cost (CAD)']}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </FieldInput>
+
+              <FieldInput label="Number of cuttings *">
+                <div style={{ display:'flex', alignItems:'center', gap:16, justifyContent:'center', padding:'8px 0' }}>
+                  <button type="button" onClick={() => setPF('cuttings', Math.max(1, propForm.cuttings-1))} style={{ width:48, height:48, borderRadius:'50%', background:'#f5f5f5', border:'none', fontSize:22, cursor:'pointer' }}>−</button>
+                  <span style={{ fontSize:40, fontWeight:600, color:'#534AB7', minWidth:50, textAlign:'center' }}>{propForm.cuttings}</span>
+                  <button type="button" onClick={() => setPF('cuttings', propForm.cuttings+1)} style={{ width:48, height:48, borderRadius:'50%', background:'#534AB7', border:'none', fontSize:22, cursor:'pointer', color:'#fff' }}>+</button>
+                </div>
+              </FieldInput>
+
+              {/* Cost per baby preview */}
+              {propForm.motherName && propForm.cuttings > 0 && (() => {
+                const mother = active.find(p => p['Plant Name']?.toLowerCase() === propForm.motherName.toLowerCase())
+                const motherCost = mother ? parseFloat(mother['Cost (CAD)']||0) : 0
+                if (!motherCost) return null
+                return (
+                  <div style={{ background:'#EEEDFE', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#534AB7' }}>
+                    Mother cost: CA${motherCost} ÷ {propForm.cuttings} cuttings = <strong>CA${(motherCost/propForm.cuttings).toFixed(2)} per baby</strong>
+                  </div>
+                )
+              })()}
+
+              <FieldInput label="Date propagated">
+                {inp(propForm.dateAdded, v=>setPF('dateAdded',v), '', 'date')}
+              </FieldInput>
+
+              {error && <div style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:12 }}>{error}</div>}
+
+              <button type="submit" disabled={saving||!propForm.motherName} style={{ width:'100%', padding:15, background:saved?'#0F6E56':saving?'#ccc':'#534AB7', color:'#fff', border:'none', borderRadius:12, fontSize:16, fontWeight:500, cursor:saving||!propForm.motherName?'default':'pointer', minHeight:52 }}>
+                {saved ? '✓ Saved!' : saving ? `Creating babies…` : `Create ${propForm.cuttings} baby plant${propForm.cuttings!==1?'s':''}` }
+              </button>
+            </form>
           </div>
-
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, marginBottom:16 }}>
-            <div>
-              <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>Quantity</label>
-              <input type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))}
-                style={{ width:'100%', padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }} />
-            </div>
-            <div>
-              <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>Date received</label>
-              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
-                style={{ width:'100%', padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }} />
-            </div>
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>Cost paid</label>
-            <div style={{ display:'flex', gap:8 }}>
-              <input type="number" value={form.cost} onChange={e=>setForm(f=>({...f,cost:e.target.value}))} placeholder="0.00" step="0.01" min="0"
-                style={{ flex:1, padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }} />
-              <select value={form.currency} onChange={e=>setForm(f=>({...f,currency:e.target.value}))}
-                style={{ padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }}>
-                <option>IDR</option><option>THB</option><option>CAD</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:8, display:'block' }}>Source</label>
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              {['Okanoka','Nattaya Plants','Somchai Exotics','Other'].map(s => (
-                <button key={s} type="button" onClick={() => setForm(f=>({...f,source:s}))} style={{
-                  padding:'6px 12px', borderRadius:20, fontSize:13, cursor:'pointer', border:'0.5px solid #e5e5e5',
-                  background: form.source===s?'#1a1a1a':'#fff', color: form.source===s?'#fff':'#666'
-                }}>{s}</button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:8, display:'block' }}>Status</label>
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              {STAGES.slice(0,-2).map(s => (
-                <button key={s} type="button" onClick={() => setForm(f=>({...f,status:s}))} style={{
-                  padding:'6px 12px', borderRadius:20, fontSize:12, cursor:'pointer',
-                  border:`0.5px solid ${STAGE_COLORS[s]}44`,
-                  background: form.status===s?STAGE_COLORS[s]:'#fff',
-                  color: form.status===s?'#fff':STAGE_COLORS[s]
-                }}>{s}</button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:8, display:'block' }}>Mother plant?</label>
-            <div style={{ display:'flex', gap:8 }}>
-              {['Yes','No'].map(v => (
-                <button key={v} type="button" onClick={() => setForm(f=>({...f,mother:v}))} style={{
-                  padding:'7px 20px', borderRadius:20, fontSize:13, cursor:'pointer', border:'0.5px solid #e5e5e5',
-                  background: form.mother===v?'#1a1a1a':'#fff', color: form.mother===v?'#fff':'#666'
-                }}>{v}</button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>Sell price (CAD) — optional</label>
-            <input type="number" value={form.sellPrice} onChange={e=>setForm(f=>({...f,sellPrice:e.target.value}))} placeholder="0.00" step="0.01" min="0"
-              style={{ width:'100%', padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }} />
-          </div>
-
-          <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:'#999', marginBottom:6, display:'block' }}>Notes — optional</label>
-            <input type="text" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. consignment, gift cert, mother plant…"
-              style={{ width:'100%', padding:'10px 12px', border:'0.5px solid #e5e5e5', borderRadius:8, fontSize:14, fontFamily:'inherit' }} />
-          </div>
-
-          <button type="submit" disabled={saving} style={{
-            width:'100%', padding:13, background: saved?'#0F6E56':'#1D9E75',
-            color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:500, cursor:'pointer'
-          }}>{saved?'✓ Saved!':saving?'Saving…':'Add to inventory'}</button>
-        </form>
+        </div>
       )}
+
     </div>
   )
 }
