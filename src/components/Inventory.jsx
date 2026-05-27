@@ -29,13 +29,18 @@ export default function Inventory() {
   const [saved, setSaved]         = useState(false)
   const [error, setError]         = useState('')
 
-  // Add form state
-  const [form, setForm] = useState({
+  // Add form — use ref to avoid cursor jump on re-render
+  const formRef = useRef({
     name: '', type: 'Alocasia', qty: 1,
     dateAdded: new Date().toISOString().slice(0,10),
     cost: '', sellPrice: '', source: 'Okanoka',
     motherPlant: 'No', status: 'Received', notes: '',
   })
+  // Only these trigger re-render (pill selections, not text inputs)
+  const [formType, setFormType]         = useState('')  // empty = no type selected
+  const [formSource, setFormSource]     = useState('Okanoka')
+  const [formStatus, setFormStatus]     = useState('Received')
+  const [formMother, setFormMother]     = useState('No')
 
   // Propagate form state
   const [propForm, setPropForm] = useState({
@@ -58,33 +63,22 @@ export default function Inventory() {
 
   async function handleAddPlant(e) {
     e.preventDefault()
-    if (!form.name) return
+    const f = formRef.current
+    if (!f.name) return
     setSaving(true); setError('')
     try {
       await addInventory([
-        form.name,
-        form.type,
-        form.qty,
-        form.dateAdded,
-        form.cost || '',
-        form.sellPrice || '',
-        '', // margin % — formula
-        form.source,
-        '', // shipment ID
-        form.motherPlant,
-        '', // mother plant ID
-        form.status,
-        form.dateAdded, // stage date = date added
-        '', // days in stage — formula
-        '', // days held — formula
-        'No',
-        form.notes,
+        f.name, formType, f.qty, f.dateAdded,
+        f.cost || '', f.sellPrice || '',
+        '', formSource, '', formMother, '',
+        formStatus, f.dateAdded, '', '', 'No', f.notes,
       ])
       setSaved(true)
       setTimeout(() => {
         setSaved(false)
         setModal(null)
-        setForm({ name:'', type:'Alocasia', qty:1, dateAdded:new Date().toISOString().slice(0,10), cost:'', sellPrice:'', source:'Okanoka', motherPlant:'No', status:'Received', notes:'' })
+        formRef.current = { name:'', type:'', qty:1, dateAdded:new Date().toISOString().slice(0,10), cost:'', sellPrice:'', source:'Okanoka', motherPlant:'No', status:'Received', notes:'' }
+        setFormType(''); setFormSource('Okanoka'); setFormStatus('Received'); setFormMother('No')
         loadPlants()
       }, 1000)
     } catch(err) {
@@ -145,7 +139,6 @@ export default function Inventory() {
   const totalCost = active.reduce((s,p) => s + parseFloat(p['Cost (CAD)']||0), 0)
   const totalVal  = active.reduce((s,p) => s + parseFloat(p['Sell Price (CAD)']||0), 0)
 
-  function setF(k,v) { setForm(f => ({...f, [k]:v})) }
   function setPF(k,v) { setPropForm(f => ({...f, [k]:v})) }
 
   function Pill({ label, active, onClick, color }) {
@@ -165,9 +158,12 @@ export default function Inventory() {
     )
   }
 
-  function inp(val, onChange, placeholder='', type='text') {
+  function inp(refKey, placeholder='', type='text') {
     return (
-      <input type={type} defaultValue={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      <input type={type}
+        defaultValue={formRef.current[refKey]}
+        onChange={e => { formRef.current[refKey] = e.target.value }}
+        placeholder={placeholder}
         style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box' }} />
     )
   }
@@ -273,53 +269,53 @@ export default function Inventory() {
             </div>
             <form onSubmit={handleAddPlant} style={{ padding:'16px' }}>
               <FieldInput label="Plant name *">
-                {inp(form.name, v=>setF('name',v), 'e.g. Alocasia Dragon Scale')}
+                {inp('name', 'e.g. Alocasia Dragon Scale')}
               </FieldInput>
 
-              <FieldInput label="Type">
+              <FieldInput label="Type (optional)">
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {TYPES.map(t => <Pill key={t} label={t} active={form.type===t} onClick={()=>setF('type',t)} />)}
+                  {TYPES.map(t => <Pill key={t} label={t} active={formType===t} onClick={()=>{ setFormType(formType===t?'':t); formRef.current.type=formType===t?'':t }} />)}
                 </div>
               </FieldInput>
 
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
                 <FieldInput label="Quantity">
-                  {inp(form.qty, v=>setF('qty',v), '1', 'number')}
+                  {inp('qty', '1', 'number')}
                 </FieldInput>
                 <FieldInput label="Date added">
-                  {inp(form.dateAdded, v=>setF('dateAdded',v), '', 'date')}
+                  {inp('dateAdded', '', 'date')}
                 </FieldInput>
               </div>
 
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
                 <FieldInput label="Cost paid (CAD)">
-                  {inp(form.cost, v=>setF('cost',v), '0.00', 'number')}
+                  {inp('cost', '0.00', 'number')}
                 </FieldInput>
                 <FieldInput label="Sell price (CAD)">
-                  {inp(form.sellPrice, v=>setF('sellPrice',v), '0.00', 'number')}
+                  {inp('sellPrice', '0.00', 'number')}
                 </FieldInput>
               </div>
 
               <FieldInput label="Source">
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {SOURCES.map(s => <Pill key={s} label={s} active={form.source===s} onClick={()=>setF('source',s)} />)}
+                  {SOURCES.map(s => <Pill key={s} label={s} active={formSource===s} onClick={()=>{ setFormSource(s); formRef.current.source=s }} />)}
                 </div>
               </FieldInput>
 
               <FieldInput label="Status">
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {STAGES.slice(0,-2).map(s => <Pill key={s} label={s} active={form.status===s} onClick={()=>setF('status',s)} color={STAGE_COLORS[s]} />)}
+                  {STAGES.slice(0,-2).map(s => <Pill key={s} label={s} active={formStatus===s} onClick={()=>{ setFormStatus(s); formRef.current.status=s }} color={STAGE_COLORS[s]} />)}
                 </div>
               </FieldInput>
 
               <FieldInput label="Mother plant?">
                 <div style={{ display:'flex', gap:8 }}>
-                  {['Yes','No'].map(v => <Pill key={v} label={v} active={form.motherPlant===v} onClick={()=>setF('motherPlant',v)} />)}
+                  {['Yes','No'].map(v => <Pill key={v} label={v} active={formMother===v} onClick={()=>{ setFormMother(v); formRef.current.motherPlant=v }} />)}
                 </div>
               </FieldInput>
 
               <FieldInput label="Notes (optional)">
-                {inp(form.notes, v=>setF('notes',v), 'Any extra info')}
+                {inp('notes', 'Any extra info')}
               </FieldInput>
 
               {error && <div style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:12 }}>{error}</div>}
