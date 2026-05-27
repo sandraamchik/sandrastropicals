@@ -64,7 +64,7 @@ export async function appendRow(tabName, rowData) {
   }
   // Only encode spaces, leave ! ' & intact
   const encodedRange = rangeStr.replace(/ /g, '%20')
-  const url = `${BASE}/${SHEET_ID}/values/${encodedRange}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
+  const url = `${BASE}/${SHEET_ID}/values/${encodedRange}:append?valueInputOption=USER_ENTERED`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
