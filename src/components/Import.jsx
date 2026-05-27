@@ -1,9 +1,10 @@
     import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addSale, addExpense, addInventory, getSales, getExpenses, getInventory, upsertCustomer } from '../services/sheets.js'
+import { addSale, addExpense, addInventory, addPurchase, getSales, getExpenses, getInventory, upsertCustomer } from '../services/sheets.js'
 
 const TEMPLATE_TYPES = [
   { key:'exactplants', label:'Exact Plants & Imports', icon:'🌱', color:'#378ADD', desc:'Your Notion CSV — Buyer, Vendor, Plant name, My price, Vendor price…' },
+  { key:'purchases',   label:'Purchases',              icon:'🛒', color:'#BA7517', desc:'Plants you bought — Date, Plant Name, Supplier, Qty, CAD Equiv, Status' },
   { key:'consignment', label:'Okanoka Consignment',    icon:'🇮🇩', color:'#1D9E75', desc:'Mother plants and stock held for shows or online sales' },
   { key:'expenses',    label:'Past Expenses',          icon:'🧾', color:'#A32D2D', desc:'Show fees, shipping, clearance, supplies, gas' },
   { key:'shopify',     label:'Shopify Orders Export',  icon:'🛍', color:'#5C6AC4', desc:'orders_export.csv from Shopify Admin → Orders → Export' },
@@ -11,6 +12,7 @@ const TEMPLATE_TYPES = [
 
 const REQUIRED_COLS = {
   exactplants: ['Buyer','Vendor','Plant name','My price'],
+  purchases:   ['Plant Name','Supplier','Qty','CAD Equiv'],
   consignment: ['Date received','Plant name','Qty received','Price per unit (CAD)'],
   expenses:    ['Date','Category','Amount (CAD)'],
   shopify:     ['Name','Email','Lineitem name','Lineitem price','Created at'],
@@ -64,6 +66,7 @@ function cleanRows(rows) {
 
 function getRowKey(type, row) {
   if (type === 'exactplants') return `${row['Buyer']||''}|${(row['Plant name']||'').toLowerCase()}|${row['My price']||''}`
+  if (type === 'purchases')   return `${row['Date']||''}|${(row['Plant Name']||row['Plant name']||'').toLowerCase()}|${row['CAD Equiv']||''}`
   if (type === 'consignment') return `${row['Date received']||''}|${(row['Plant name']||'').toLowerCase()}`
   if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
   if (type === 'shopify')     return `${(row['Created at']||'').slice(0,10)}|${(row['Lineitem name']||'').toLowerCase()}|${row['Lineitem price']||''}`
@@ -72,6 +75,7 @@ function getRowKey(type, row) {
 
 function getExistingKey(type, row) {
   if (type === 'exactplants') return `${(row['Customer']||'').toLowerCase()}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
+  if (type === 'purchases')   return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${row['CAD Equiv']||''}`
   if (type === 'consignment') return `${row['Date Added']||''}|${(row['Plant Name']||'').toLowerCase()}`
   if (type === 'expenses')    return `${row['Date']||''}|${(row['Category']||'').toLowerCase()}|${row['Amount (CAD)']||''}`
   if (type === 'shopify')     return `${row['Date']||''}|${(row['Plant Name']||'').toLowerCase()}|${row['Sale Price (CAD)']||''}`
@@ -89,6 +93,30 @@ function getShopifyIncomingKey(row) {
 }
 
 function mapRow(type, row) {
+  // ── PURCHASES ─────────────────────────────────────────────────────────────
+  if (type === 'purchases') {
+    const plant    = (row['Plant Name']||row['Plant name']||'').trim()
+    const supplier = (row['Supplier']||row['Source']||'').trim()
+    const qty      = row['Qty']||1
+    const cadEquiv = parseFloat(row['CAD Equiv']||row['CAD equiv']||0)||''
+    const date     = row['Date']||new Date().toISOString().slice(0,10)
+    const status   = row['Status']||'On order'
+    const notes    = row['Notes']||''
+    if (!plant) return null
+    return { type:'purchase', data:[
+      date, plant, supplier, qty,
+      row['Price Paid (orig)']||'',
+      row['Currency']||'',
+      cadEquiv,
+      row['Exchange Rate']||'',
+      row['Shipment ID']||'',
+      supplier,
+      row['Mother Plant']||'No',
+      status,
+      notes,
+    ]}
+  }
+
   // ── EXACT PLANTS ──────────────────────────────────────────────────────────
   if (type === 'exactplants') {
     const parseP = v => {
@@ -222,9 +250,9 @@ function mapRow(type, row) {
 }
 
 function getRowDisplay(type, row) {
-  const name   = row['Plant name']||row['Lineitem name']||row['Plant Name']||row['Description']||'—'
-  const amount = row['My price']||row['Lineitem price']||row['Amount (CAD)']||''
-  const buyer  = row['Buyer']||row['Billing Name']||row['Shipping Name']||''
+  const name   = row['Plant name']||row['Plant Name']||row['Lineitem name']||row['Description']||'—'
+  const amount = row['My price']||row['CAD Equiv']||row['CAD equiv']||row['Lineitem price']||row['Amount (CAD)']||''
+  const buyer  = row['Buyer']||row['Supplier']||row['Billing Name']||row['Shipping Name']||''
   const date   = row['Date']||(row['Created at']||'').slice(0,10)||row['Date received']||''
   return { name, amount, buyer, date }
 }
@@ -314,6 +342,7 @@ export default function Import() {
         if (mapped.type === 'sale')           await addSale(mapped.data)
         else if (mapped.type === 'expense')   await addExpense(mapped.data)
         else if (mapped.type === 'inventory') await addInventory(mapped.data)
+        else if (mapped.type === 'purchase')  await addPurchase(mapped.data)
 
         count++
         setSaved(count)
