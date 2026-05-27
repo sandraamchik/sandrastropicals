@@ -136,8 +136,8 @@ export default function Inventory() {
     acc[s] = active.filter(p => p.Status === s).length
     return acc
   }, {})
-  const totalCost = active.reduce((s,p) => s + parseFloat(p['Cost (CAD)']||0), 0)
-  const totalVal  = active.reduce((s,p) => s + parseFloat(p['Sell Price (CAD)']||0), 0)
+  const totalCost = active.reduce((s,p) => s + (parseFloat(p['Cost (CAD)'])||0), 0)
+  const totalVal  = active.reduce((s,p) => s + (parseFloat(p['Sell Price (CAD)'])||0), 0)
 
   function setPF(k,v) { setPropForm(f => ({...f, [k]:v})) }
 
@@ -342,54 +342,62 @@ export default function Inventory() {
             </div>
             <form onSubmit={handlePropagate} style={{ padding:'16px' }}>
 
-              <FieldInput label="Mother plant name *">
-                <div style={{ position:'relative' }}>
-                  {inp(propForm.motherName, v=>setPF('motherName',v), 'Type to search your inventory')}
-                  {propForm.motherName.length > 1 && (
-                    <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:9, boxShadow:'0 4px 12px rgba(0,0,0,0.1)', zIndex:100, maxHeight:160, overflowY:'auto' }}>
-                      {active.filter(p => p['Plant Name']?.toLowerCase().includes(propForm.motherName.toLowerCase())).slice(0,6).map((p,i) => (
-                        <div key={i} onMouseDown={() => setPF('motherName', p['Plant Name'])}
-                          style={{ padding:'10px 13px', fontSize:14, cursor:'pointer', borderBottom:'0.5px solid #f5f5f5' }}
-                          onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
-                          onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                          {p['Plant Name']}
-                          {p['Cost (CAD)'] && <span style={{ fontSize:12, color:'#999', marginLeft:8 }}>CA${p['Cost (CAD)']}</span>}
-                        </div>
+              {active.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'32px 0', color:'#999' }}>
+                  <div style={{ fontSize:40, marginBottom:12 }}>🌱</div>
+                  <div style={{ fontSize:15, fontWeight:500, color:'#1a1a1a', marginBottom:8 }}>No plants in inventory yet</div>
+                  <div style={{ fontSize:14, lineHeight:1.6 }}>Add plants to Inventory first, then you can log propagation from them.</div>
+                  <button type="button" onClick={() => setModal('add')} style={{ marginTop:20, padding:'12px 24px', background:'#1D9E75', color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:500, cursor:'pointer' }}>+ Add plant first</button>
+                </div>
+              ) : (
+                <>
+                  <FieldInput label="Select mother plant *">
+                    <select value={propForm.motherName} onChange={e => setPF('motherName', e.target.value)} required
+                      style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box', background:'#fff' }}>
+                      <option value="">— Choose a plant —</option>
+                      {active.map((p,i) => (
+                        <option key={i} value={p['Plant Name']}>
+                          {p['Plant Name']}{p['Cost (CAD)'] ? ` — CA$${p['Cost (CAD)']}` : ''}
+                        </option>
                       ))}
+                    </select>
+                  </FieldInput>
+
+                  <FieldInput label="Number of cuttings *">
+                    <div style={{ display:'flex', alignItems:'center', gap:16, justifyContent:'center', padding:'8px 0' }}>
+                      <button type="button" onClick={() => setPF('cuttings', Math.max(1, propForm.cuttings-1))} style={{ width:48, height:48, borderRadius:'50%', background:'#f5f5f5', border:'none', fontSize:22, cursor:'pointer' }}>−</button>
+                      <span style={{ fontSize:40, fontWeight:600, color:'#534AB7', minWidth:50, textAlign:'center' }}>{propForm.cuttings}</span>
+                      <button type="button" onClick={() => setPF('cuttings', propForm.cuttings+1)} style={{ width:48, height:48, borderRadius:'50%', background:'#534AB7', border:'none', fontSize:22, cursor:'pointer', color:'#fff' }}>+</button>
                     </div>
-                  )}
-                </div>
-              </FieldInput>
+                  </FieldInput>
 
-              <FieldInput label="Number of cuttings *">
-                <div style={{ display:'flex', alignItems:'center', gap:16, justifyContent:'center', padding:'8px 0' }}>
-                  <button type="button" onClick={() => setPF('cuttings', Math.max(1, propForm.cuttings-1))} style={{ width:48, height:48, borderRadius:'50%', background:'#f5f5f5', border:'none', fontSize:22, cursor:'pointer' }}>−</button>
-                  <span style={{ fontSize:40, fontWeight:600, color:'#534AB7', minWidth:50, textAlign:'center' }}>{propForm.cuttings}</span>
-                  <button type="button" onClick={() => setPF('cuttings', propForm.cuttings+1)} style={{ width:48, height:48, borderRadius:'50%', background:'#534AB7', border:'none', fontSize:22, cursor:'pointer', color:'#fff' }}>+</button>
-                </div>
-              </FieldInput>
+                  {propForm.motherName && (() => {
+                    const mother = active.find(p => p['Plant Name'] === propForm.motherName)
+                    const motherCost = parseFloat(mother?.['Cost (CAD)']||0)
+                    if (!motherCost) return (
+                      <div style={{ background:'#f5f5f5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#666' }}>
+                        No cost recorded for this plant — babies will have no cost assigned.
+                      </div>
+                    )
+                    return (
+                      <div style={{ background:'#EEEDFE', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#534AB7' }}>
+                        CA${motherCost} ÷ {propForm.cuttings} = <strong>CA${(motherCost/propForm.cuttings).toFixed(2)} per baby</strong>
+                      </div>
+                    )
+                  })()}
 
-              {/* Cost per baby preview */}
-              {propForm.motherName && propForm.cuttings > 0 && (() => {
-                const mother = active.find(p => p['Plant Name']?.toLowerCase() === propForm.motherName.toLowerCase())
-                const motherCost = mother ? parseFloat(mother['Cost (CAD)']||0) : 0
-                if (!motherCost) return null
-                return (
-                  <div style={{ background:'#EEEDFE', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#534AB7' }}>
-                    Mother cost: CA${motherCost} ÷ {propForm.cuttings} cuttings = <strong>CA${(motherCost/propForm.cuttings).toFixed(2)} per baby</strong>
-                  </div>
-                )
-              })()}
+                  <FieldInput label="Date propagated">
+                    <input type="date" value={propForm.dateAdded} onChange={e=>setPF('dateAdded',e.target.value)}
+                      style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box' }} />
+                  </FieldInput>
 
-              <FieldInput label="Date propagated">
-                {inp(propForm.dateAdded, v=>setPF('dateAdded',v), '', 'date')}
-              </FieldInput>
+                  {error && <div style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:12 }}>{error}</div>}
 
-              {error && <div style={{ background:'#fceaea', borderLeft:'3px solid #A32D2D', borderRadius:'0 8px 8px 0', padding:'10px 13px', fontSize:13, color:'#7a2020', marginBottom:12 }}>{error}</div>}
-
-              <button type="submit" disabled={saving||!propForm.motherName} style={{ width:'100%', padding:15, background:saved?'#0F6E56':saving?'#ccc':'#534AB7', color:'#fff', border:'none', borderRadius:12, fontSize:16, fontWeight:500, cursor:saving||!propForm.motherName?'default':'pointer', minHeight:52 }}>
-                {saved ? '✓ Saved!' : saving ? `Creating babies…` : `Create ${propForm.cuttings} baby plant${propForm.cuttings!==1?'s':''}` }
-              </button>
+                  <button type="submit" disabled={saving||!propForm.motherName} style={{ width:'100%', padding:15, background:saved?'#0F6E56':saving?'#ccc':'#534AB7', color:'#fff', border:'none', borderRadius:12, fontSize:16, fontWeight:500, cursor:saving||!propForm.motherName?'default':'pointer', minHeight:52 }}>
+                    {saved?'✓ Saved!':saving?'Creating babies…':`Create ${propForm.cuttings} baby plant${propForm.cuttings!==1?'s':''}`}
+                  </button>
+                </>
+              )}
             </form>
           </div>
         </div>
