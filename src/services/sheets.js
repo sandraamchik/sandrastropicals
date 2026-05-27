@@ -55,11 +55,11 @@ export async function appendRow(tabName, rowData) {
   }
   if (!token) throw new Error('Not signed in — please sign in to save data')
 
-  // Build range — encode only the tab name, keep single quotes raw for Google Sheets API
-  const encodedTab = tabName.includes(' ') 
-    ? `'${tabName.replace(/'/g, "''")}'!A1`
+  // Build range — encode tab name correctly for Google Sheets API
+  const encodedTab = tabName.includes(' ')
+    ? `'${tabName.replace(/'/g, "''")}'!A1`.replace(/ /g, '%20')
     : `${tabName}!A1`
-  const url = `${BASE}/${SHEET_ID}/values/${encodedTab.replace(/ /g, '%20')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
+  const url = `${BASE}/${SHEET_ID}/values/${encodedTab}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
