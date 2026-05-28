@@ -33,7 +33,7 @@ export default function PL() {
   const row = plData.find(r => r['Month'] === monthLabel) || {}
 
   const revenue  = parseFloat(row['Total Revenue']||0)
-  const expTotal = parseFloat(row['Total Expenses']||0)
+  const expTotal = parseFloat(row['Total Costs']||row['Total Expenses']||0)
   const profit   = parseFloat(row['Net Profit']||0) || (revenue - expTotal)
   const margin   = revenue > 0 ? Math.round((profit/revenue)*100) : 0
   const goalPct  = Math.min(100, Math.round((revenue/GOAL)*100))
