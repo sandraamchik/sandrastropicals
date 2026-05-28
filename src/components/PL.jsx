@@ -28,8 +28,8 @@ export default function PL() {
   const year = new Date().getFullYear()
   const ms = sales.filter(s => { const d=new Date(s.Date); return d.getMonth()===activeMonth&&d.getFullYear()===year })
   const me = expenses.filter(e => { const d=new Date(e.Date); return d.getMonth()===activeMonth&&d.getFullYear()===year })
-  const revenue  = ms.reduce((s,r)=>s+parseFloat(r['Sale Price (CAD)']||0),0)
-  const expTotal = me.reduce((s,r)=>s+parseFloat(r['Amount (CAD)']||0),0)
+  const revenue  = ms.reduce((s,r)=>s+( parseFloat(r['Sale Price (CAD)'])||0 ),0)
+  const expTotal = me.reduce((s,r)=>s+( parseFloat(r['Amount (CAD)'])||0 ),0)
   const profit   = revenue-expTotal
   const margin   = revenue>0?Math.round((profit/revenue)*100):0
   const goalPct  = Math.min(100,Math.round((revenue/GOAL)*100))
@@ -100,7 +100,7 @@ export default function PL() {
           <SectionTitle>Transactions</SectionTitle>
           <div style={{ padding:'0 16px', display:'flex', flexDirection:'column', gap:8, paddingBottom:24 }}>
             {ms.length===0&&me.length===0 ? <div style={{ fontSize:14, color:'#999' }}>No transactions this month</div>
-            : [...ms.map(s=>({type:'sale',name:s['Plant Name'],meta:`${s.Channel}·${s.Payment||''}`,amount:parseFloat(s['Sale Price (CAD)']||0)})),
+            : [...ms.map(s=>({type:'sale',name:s['Plant Name'],meta:`${s.Channel}·${s.Payment||''}`,amount:parseFloat(s['Sale Price (CAD)'])||0})),
                ...me.map(e=>({type:'expense',name:e.Description||e.Category,meta:e.Category,amount:parseFloat(e['Amount (CAD)']||0)}))
               ].map((t,i) => (
               <div key={i} style={{ background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:10, padding:'12px 13px', display:'flex', alignItems:'center', gap:11 }}>
