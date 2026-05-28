@@ -1,6 +1,6 @@
     import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getPL, getSales, getExpenses } from '../services/sheets.js'
+import { getPL, getSales } from '../services/sheets.js'
 import { TopBar, SectionTitle, FAB } from './Nav.jsx'
 import SGSaleModal from './SGSaleModal.jsx'
 
