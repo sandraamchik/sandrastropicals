@@ -250,6 +250,11 @@ export default function Inventory() {
                         {action}
                       </button>
                     ))}
+                    <button type="button"
+                      onClick={e => { e.stopPropagation(); setPropForm(f=>({...f, motherName:p['Plant Name']})); setModal('propagate') }}
+                      style={{ padding:'6px 11px', borderRadius:8, border:'0.5px solid #534AB7', background:'#EEEDFE', fontSize:12, color:'#534AB7', cursor:'pointer' }}>
+                      ✂️ Propagate
+                    </button>
                   </div>
                 </div>
               )}
@@ -351,16 +356,31 @@ export default function Inventory() {
                 </div>
               ) : (
                 <>
-                  <FieldInput label="Select mother plant *">
-                    <select value={propForm.motherName} onChange={e => setPF('motherName', e.target.value)} required
-                      style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box', background:'#fff' }}>
-                      <option value="">— Choose a plant —</option>
-                      {active.map((p,i) => (
-                        <option key={i} value={p['Plant Name']}>
-                          {p['Plant Name']}{p['Cost (CAD)'] ? ` — CA$${p['Cost (CAD)']}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                  <FieldInput label="Search mother plant *">
+                    <input
+                      type="text"
+                      value={propForm.motherName}
+                      onChange={e => setPF('motherName', e.target.value)}
+                      placeholder="Type plant name to search…"
+                      style={{ width:'100%', padding:'11px 13px', border:'0.5px solid #e5e5e5', borderRadius:9, fontSize:15, fontFamily:'inherit', outline:'none', minHeight:48, boxSizing:'border-box' }}
+                    />
+                    {propForm.motherName.length > 0 && (
+                      <div style={{ border:'0.5px solid #e5e5e5', borderRadius:9, marginTop:4, maxHeight:180, overflowY:'auto', background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
+                        {active.filter(p => p['Plant Name']?.toLowerCase().includes(propForm.motherName.toLowerCase())).slice(0,8).map((p,i) => (
+                          <div key={i}
+                            onMouseDown={() => setPF('motherName', p['Plant Name'])}
+                            style={{ padding:'10px 13px', fontSize:14, cursor:'pointer', borderBottom:'0.5px solid #f5f5f5', display:'flex', justifyContent:'space-between', alignItems:'center' }}
+                            onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
+                            onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                            <span>{p['Plant Name']}</span>
+                            {p['Cost (CAD)'] && <span style={{ fontSize:12, color:'#1D9E75' }}>CA${p['Cost (CAD)']}</span>}
+                          </div>
+                        ))}
+                        {active.filter(p => p['Plant Name']?.toLowerCase().includes(propForm.motherName.toLowerCase())).length === 0 && (
+                          <div style={{ padding:'10px 13px', fontSize:13, color:'#999' }}>No plants found</div>
+                        )}
+                      </div>
+                    )}
                   </FieldInput>
 
                   <FieldInput label="Number of cuttings *">
