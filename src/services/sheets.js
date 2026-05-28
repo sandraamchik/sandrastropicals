@@ -22,7 +22,7 @@ const TAB_CONFIG = {
 // ── READ (API key — no auth needed) ──────────────────────────────────────────
 export async function readSheet(tabName) {
   const config = TAB_CONFIG[tabName] || { headerRow: 1, dataRow: 2 }
-  const url    = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z2000?key=${API_KEY}`
+  const url    = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}!A1:Z2000?key=${API_KEY}&valueRenderOption=UNFORMATTED_VALUE`
   const res    = await fetch(url)
   if (!res.ok) throw new Error(`Failed to read ${tabName}: ${res.statusText}`)
   const data   = await res.json()
