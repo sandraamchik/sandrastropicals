@@ -20,7 +20,7 @@ const REQUIRED_COLS = {
 
 // Sales tab columns (in order):
 // Date | Plant Name | Customer | Vendor | Qty | Sale Price (CAD) | Cost of Plant (CAD) | Margin $ | Margin % | Channel | Show Name | Payment | Cash (CRA exclude) | Shipment ID | Notes
-function saleRow({ date, plant, customer, vendor, qty, salePrice, costPrice, channel, showName, payment, cash, shipmentId, notes }) {
+function saleRow({ date, plant, customer, vendor, qty, salePrice, costPrice, channel, showName, payment, cash, shipmentId, country, notes }) {
   return [
     date || '',       // A: Date
     plant || '',      // B: Plant Name
@@ -29,14 +29,15 @@ function saleRow({ date, plant, customer, vendor, qty, salePrice, costPrice, cha
     qty || 1,         // E: Qty
     salePrice || '',  // F: Sale Price (CAD)
     costPrice || '',  // G: Cost of Plant (CAD)
-    '',               // H: Margin $ — leave blank, formula in sheet calculates it
-    '',               // I: Margin % — leave blank, formula in sheet calculates it
+    '',               // H: Margin $ — formula
+    '',               // I: Margin % — formula
     channel || '',    // J: Channel
     showName || '',   // K: Show Name
     payment || '',    // L: Payment
     cash || 'No',     // M: Cash (CRA exclude)
     shipmentId || '', // N: Shipment ID
-    notes || '',      // O: Notes
+    country || '',    // O: Country
+    notes || '',      // P: Notes
   ]
 }
 
@@ -137,7 +138,9 @@ function mapRow(type, row) {
 
     if (!plant && !myPrice) return null
 
-    const customer = buyer.toLowerCase().includes('sandra') ? '' : buyer
+    // Sandra (me) or similar → show as "Sandra"
+    const isSandra = buyer.toLowerCase().includes('sandra')
+    const customer = isSandra ? 'Sandra' : buyer
 
     return {
       type: 'sale',
@@ -152,13 +155,13 @@ function mapRow(type, row) {
         channel: 'Exact plant',
         payment: paid === 'Yes' ? '📲 E-transfer' : '',
         cash: 'No',
+        country,          // now goes to Country column
         notes: [
-          country ? `Country: ${country}` : '',
           packingFee > 0 ? `Packing: CA$${packingFee}` : '',
           comments,
         ].filter(Boolean).join(' · '),
       }),
-      customer: customer ? { name: customer, date, channel: 'Exact plant', note: plant } : null
+      customer: (!isSandra && customer) ? { name: customer, date, channel: 'Exact plant', note: plant } : null
     }
   }
 
