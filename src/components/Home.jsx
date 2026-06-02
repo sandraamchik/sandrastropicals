@@ -216,7 +216,7 @@ export default function Home({ onSignOut }) {
       await addSale([
         d.date, d.name, saleCustomer, '', 1, parseFloat(d.amount),
         '', '', '', saleChannel, '',
-        salePayment, salePayment==='💵 Cash'?'Yes':'No', '', notes
+        salePayment, salePayment==='💵 Cash'?'Yes':'No', '', '', notes
       ])
       // Auto-save customer
       if (saleRef.current.customer) {
