@@ -155,7 +155,7 @@ function mapRow(type, row) {
         channel: 'Exact plant',
         payment: paid === 'Yes' ? '📲 E-transfer' : '',
         cash: 'No',
-        country,          // now goes to Country column
+        country,          // clean country name only e.g. "Indonesia"
         notes: [
           packingFee > 0 ? `Packing: CA$${packingFee}` : '',
           comments,
